@@ -1,12 +1,10 @@
 """
 LLM Comprehension Layer for OSINT Analysis
 ==========================================
-Primary:  Google Gemini (gemini-1.5-flash / gemini-2.0-flash)
-Backdoor: OpenAI-compatible API (OpenAI, Together.ai, Groq, LM Studio, etc.)
-          Ollama (local, zero-cost, offline capable)
+Primary: Ollama (local, zero-cost, offline capable)
+Backdoor: OpenAI-compatible API, Google Gemini (optional fallbacks)
 
-Provider selection is controlled by the LLM_PROVIDER env variable.
-API keys are loaded from environment / .env file.
+Provider selection is controlled by the LLM_PROVIDER env variable, but defaults to 'ollama'.
 """
 
 import json
@@ -152,7 +150,7 @@ class LLMProvider:
         if not parsed.get("narrative_summary"):
             try:
                 print(f"[LLM] JSON narrative summary empty. Running secondary text prompt fallback.")
-                narrative_prompt = f"Write a 3-paragraph OSINT narrative summary for {target_type} '{target_value}' based on these findings:\n{json.dumps(entities)[:2000]}\nProvide ONLY the text summary."
+                narrative_prompt = f"Write a 3-paragraph detailed investigative narrative summary for {target_type} '{target_value}' based on these findings:\n{json.dumps(entities)[:2000]}\nProvide ONLY the text summary."
                 fallback_text = await self.complete(narrative_prompt, max_tokens=1000)
                 parsed["narrative_summary"] = fallback_text.strip("`").replace("json\n", "")
             except Exception as e:
@@ -271,7 +269,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are an elite OSINT analyst for law enforcement. Return only valid JSON."
+                        "content": "You are an elite data intelligence analyst. Return only valid JSON."
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -401,50 +399,13 @@ class OllamaProvider(LLMProvider):
 def get_llm_provider() -> Optional[LLMProvider]:
     """
     Returns the configured LLM provider.
-    Default: Ollama (local, no API key needed).
-
-    LLM_PROVIDER values:
-      ollama  — Local Ollama server (DEFAULT). Install: https://ollama.ai
-                Pull model: ollama pull qwen2.5
-      none    — Disable LLM, fall back to regex-only extraction
-      gemini  — Google Gemini (needs GEMINI_API_KEY)
-      openai  — OpenAI-compatible API (needs OPENAI_API_KEY or custom base URL)
+    Always returns Ollama.
     """
-    provider_name = (
-        getattr(settings, "LLM_PROVIDER", None)
-        or os.environ.get("LLM_PROVIDER", "ollama")
-    ).lower().strip()
-
-    if provider_name in ("none", "disabled", "off"):
-        print("[LLM] Disabled — using regex-only extraction.")
-        return None
-
-    if provider_name == "ollama":
-        host = getattr(settings, "OLLAMA_HOST", "http://localhost:11434")
-        model = getattr(settings, "OLLAMA_MODEL", "qwen2.5")
-        print(f"[LLM] Using Ollama local model: {model} @ {host}")
-        print(f"[LLM] (If not installed: https://ollama.ai | Pull: ollama pull {model})")
-        return OllamaProvider(host=host, model=model)
-
-    elif provider_name == "gemini":
-        api_key = getattr(settings, "GEMINI_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
-        if not api_key:
-            print("[LLM] WARNING: GEMINI_API_KEY not set. Falling back to Ollama.")
-            return OllamaProvider()
-        model = getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash")
-        print(f"[LLM] Using Google Gemini ({model})")
-        return GeminiProvider()
-
-    elif provider_name == "openai":
-        api_key = getattr(settings, "OPENAI_API_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
-        base_url = getattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1")
-        model = getattr(settings, "OPENAI_MODEL", "gpt-4o-mini")
-        print(f"[LLM] Using OpenAI-compatible API → {base_url} ({model})")
-        return OpenAICompatibleProvider(api_key=api_key, base_url=base_url, model=model)
-
-    else:
-        print(f"[LLM] Unknown provider '{provider_name}'. Defaulting to Ollama (qwen2.5).")
-        return OllamaProvider()
+    host = getattr(settings, "OLLAMA_HOST", "http://localhost:11434")
+    model = getattr(settings, "OLLAMA_MODEL", "qwen2.5")
+    print(f"[LLM] Using Ollama local model: {model} @ {host}")
+    print(f"[LLM] (If not installed: https://ollama.ai | Pull: ollama pull {model})")
+    return OllamaProvider(host=host, model=model)
 
 
 # ---------------------------------------------------------------------------

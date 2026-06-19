@@ -285,6 +285,7 @@ def _render_results(results: Dict):
 
     with tab1:
         _render_llm_profile(results)
+        _render_agent_findings(results)
         
         st.markdown("### 🔗 Correlated Identities & Likelihoods")
         correlated = results.get("correlated_profiles", [])
@@ -545,3 +546,32 @@ def _render_llm_profile(results: Dict):
     st.caption(f"**Generation Details:**")
     st.caption(f"LLM Comprehension: `{'Enabled' if llm_enabled else 'Disabled'}` | Model: `{meta.get('llm_provider', 'none')}`")
     st.caption(f"Ollama-MCP Tools: `{'Enabled' if mcp_enabled else 'Disabled'}` | Model: `{meta.get('ollama_model', 'none')}`")
+
+def _render_agent_findings(results: Dict):
+    agent_data = results.get("agent_structured_data", {})
+    if not agent_data:
+        return
+        
+    st.markdown("---")
+    st.markdown("### 🕵️ Agent Workflow Findings")
+    
+    confirmed = agent_data.get("confirmed_entities", [])
+    if confirmed:
+        st.markdown("#### ✅ Confirmed Entities")
+        # Sort by confidence
+        confirmed = sorted(confirmed, key=lambda x: x.get("confidence", 0), reverse=True)
+        for ent in confirmed:
+            with st.expander(f"{ent.get('persona_name', 'Unknown')} | Confidence: {ent.get('confidence', 0):.0%}", expanded=True):
+                st.write(f"**Reasoning:** {ent.get('reasoning', '')}")
+                linked = ent.get('linked_data', {})
+                st.json(linked)
+                
+    possible = agent_data.get("possible_entities", [])
+    if possible:
+        st.markdown("#### ❓ Possible Entities")
+        possible = sorted(possible, key=lambda x: x.get("confidence", 0), reverse=True)
+        for ent in possible:
+            with st.expander(f"{ent.get('persona_name', 'Unknown')} | Confidence: {ent.get('confidence', 0):.0%}", expanded=False):
+                st.write(f"**Reasoning:** {ent.get('reasoning', '')}")
+                linked = ent.get('linked_data', {})
+                st.json(linked)

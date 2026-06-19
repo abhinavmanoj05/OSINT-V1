@@ -29,7 +29,7 @@ def check_requirements():
         ("uvicorn", "uvicorn"),
         ("streamlit", "streamlit"),
         ("aiohttp", "aiohttp"),
-        ("duckduckgo_search", "duckduckgo-search"),
+        ("ddgs", "ddgs"),
         ("mcp", "mcp"),
         ("ollama", "ollama"),
         ("bs4", "beautifulsoup4"),

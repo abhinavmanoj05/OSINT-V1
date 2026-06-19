@@ -1,12 +1,14 @@
 """
 Unified OSINT Engine — Individual profiling with real correlation and metadata extraction
-LLM Comprehension: Gemini (primary) | OpenAI-compatible (backdoor A) | Ollama (backdoor B)
-MCP Tools: Maigret, SpiderFoot + existing Sherlock/Holehe
+LLM Comprehension: Ollama (Primary and Default)
+Tools: Custom Agent Workflow (Sherlock/Holehe/Scraping)
 """
 import asyncio
 import json
+import os
 import re
 import tempfile
+from backend.core.proxy_config import PROXY
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,20 +23,7 @@ try:
 except ImportError:
     _get_llm = lambda: None  # noqa
 
-# MCP Tool wrappers
-try:
-    from backend.services.mcp_osint_tools import MCPToolsOrchestrator
-    _MCP_AVAILABLE = True
-except ImportError:
-    _MCP_AVAILABLE = False
-
-# Ollama + new_version MCP searcher (graceful fallback if not available)
-try:
-    from backend.services.ollama_mcp_searcher import get_ollama_mcp_searcher as _get_ollama_mcp
-    _OLLAMA_MCP_AVAILABLE = True
-except ImportError:
-    _get_ollama_mcp = lambda: None  # noqa
-    _OLLAMA_MCP_AVAILABLE = False
+# Removed MCP wrappers. Everything goes through agent_workflow now.
 
 
 @dataclass
@@ -58,7 +47,6 @@ class OSINTFinding:
 # ---------------------------------------------------------------------------
 # Tool wrappers
 # ---------------------------------------------------------------------------
-
 class SherlockWrapper:
     def __init__(self, sherlock_path: str = "sherlock"):
         self.sherlock_path = sherlock_path
@@ -66,11 +54,17 @@ class SherlockWrapper:
     async def investigate(self, username: str, timeout: int = 90) -> List[OSINTFinding]:
         findings = []
         cmd = [self.sherlock_path, username, "--timeout", "5"]
+        
+        # Merge proxy env vars with current environment
+        env = os.environ.copy()
+        env.update(PROXY.as_env_vars())
+        
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=env  # <-- ADD THIS
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             for line in stdout.decode('utf-8', errors='ignore').split('\n'):
@@ -91,15 +85,18 @@ class SherlockWrapper:
             print(f"Sherlock error: {e}")
         return findings
 
-
 class HoleheWrapper:
     async def investigate(self, email: str) -> List[OSINTFinding]:
         findings = []
+        env = os.environ.copy()
+        env.update(PROXY.as_env_vars())
+        
         try:
             proc = await asyncio.create_subprocess_exec(
                 "holehe", email,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=env  # <-- ADD THIS
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
             for line in stdout.decode('utf-8', errors='ignore').split('\n'):
@@ -129,10 +126,13 @@ class GitHubAPIClient:
 
     async def _get(self, path: str, params: dict = None) -> dict:
         import aiohttp
+        proxy = PROXY.as_aiohttp_proxy()
         try:
             async with aiohttp.ClientSession(headers=self.HEADERS) as session:
                 async with session.get(
-                    f"{self.BASE}{path}", params=params,
+                    f"{self.BASE}{path}", 
+                    params=params,
+                    proxy=proxy,  # <-- ADD THIS
                     timeout=aiohttp.ClientTimeout(total=10)
                 ) as r:
                     if r.status == 200:
@@ -201,8 +201,6 @@ def _random_ua() -> str:
 
 
 class WebScraper:
-    """Scrapes pages and extracts both text content and structured metadata."""
-
     def _fetch_sync(self, url: str, timeout: int) -> bytes:
         import urllib.request
         req = urllib.request.Request(
@@ -213,7 +211,16 @@ class WebScraper:
                 'Accept-Language': 'en-US,en;q=0.5',
             }
         )
-        with urllib.request.urlopen(req, timeout=timeout) as res:
+        
+        # Build opener with proxy
+        proxy_dict = PROXY.as_urllib_dict()
+        if proxy_dict:
+            proxy_handler = urllib.request.ProxyHandler(proxy_dict)
+            opener = urllib.request.build_opener(proxy_handler)
+        else:
+            opener = urllib.request.build_opener()
+            
+        with opener.open(req, timeout=timeout) as res:
             return res.read()
 
     def _extract_metadata(self, soup) -> dict:
@@ -321,7 +328,6 @@ class WebScraper:
             print(f"PDF extraction failed for {url}: {e}")
         return ""
 
-
 # ---------------------------------------------------------------------------
 # Main profiler
 # ---------------------------------------------------------------------------
@@ -382,10 +388,7 @@ class EntityProfiler:
         self.github = GitHubAPIClient()
         self.search_client = self._get_search_client()
         self.scraper = WebScraper()
-        # MCP-derived tools (Maigret, SpiderFoot)
-        self.mcp_tools = MCPToolsOrchestrator() if _MCP_AVAILABLE else None
-        # Ollama+MCP searcher from new_version (additional identity search layer)
-        self.ollama_mcp = _get_ollama_mcp(llm_model) if _OLLAMA_MCP_AVAILABLE else None
+        # MCP tools disabled. Using agent_workflow exclusively.
         # LLM provider (Gemini / OpenAI / Ollama — set LLM_PROVIDER in .env)
         self._llm = None  # lazy-loaded on first use
 
@@ -403,13 +406,10 @@ class EntityProfiler:
     def llm(self):
         """Lazy-load LLM provider to avoid import errors at startup."""
         if self._llm is None:
-            if self.llm_model:
-                from backend.services.llm_comprehension import OllamaProvider
-                # Initialize specific model using Ollama provider
-                host = getattr(settings, "OLLAMA_HOST", "http://localhost:11434")
-                self._llm = OllamaProvider(host=host, model=self.llm_model)
-            else:
-                self._llm = _get_llm()
+            from backend.services.llm_comprehension import OllamaProvider
+            host = getattr(settings, "OLLAMA_HOST", "http://localhost:11434")
+            model = self.llm_model or getattr(settings, "OLLAMA_MODEL", "qwen2.5")
+            self._llm = OllamaProvider(host=host, model=model)
         return self._llm
 
     async def profile_target(
@@ -442,111 +442,7 @@ class EntityProfiler:
             opsec_warnings.append("Ensure no local investigator metadata leaks during external lookup.")
             recommended_next_steps.append("Check breach databases via localized mirrors.")
 
-        # --- Sherlock (username only) ---
-        if target_type == "username":
-            sherlock_results = await self.sherlock.investigate(target_value)
-            for r in sherlock_results:
-                if r.url:
-                    platform = _platform_from_url(r.url) or r.platform
-                    source_links.append({
-                        "title": f"[SHERLOCK] {platform}: {r.url}",
-                        "url": r.url,
-                        "category": "social",
-                        "platform": platform,
-                        "confidence": r.confidence,
-                        "engine": "sherlock",
-                    })
-                    text_corpus.append(f"Confirmed account on {platform} at {r.url}")
-
-        # --- Holehe (email only) ---
-        if target_type == "email":
-            holehe_results = await self.holehe.investigate(target_value)
-            for r in holehe_results:
-                text_corpus.append(f"Email registered on: {r.platform}")
-                source_links.append({
-                    "title": f"[HOLEHE] Registered on {r.platform}",
-                    "url": r.url or f"https://{r.platform}",
-                    "category": "social",
-                    "platform": r.platform,
-                    "confidence": r.confidence,
-                    "engine": "holehe",
-                })
-
-        # --- MCP Tools (Maigret) ---
-        # Runs concurrently with Sherlock/Holehe — adds multi-thousand-site coverage
-        mcp_findings = []
-        if self.mcp_tools:
-            try:
-                use_sf = getattr(settings, "USE_SPIDERFOOT", False)
-                mcp_findings = await asyncio.wait_for(
-                    self.mcp_tools.run_for_target(
-                        target_type, target_value, use_spiderfoot=use_sf
-                    ),
-                    timeout=120
-                )
-                for r in mcp_findings:
-                    platform = _platform_from_url(r.url or "") or r.platform or r.source
-                    source_links.append({
-                        "title": f"[{r.source.upper()}] {platform}: {r.url or r.entity_value}",
-                        "url": r.url or "",
-                        "category": "social" if r.entity_type == "username" else r.entity_type,
-                        "platform": platform,
-                        "confidence": r.confidence,
-                        "engine": r.source,
-                        "metadata": r.metadata or {},
-                    })
-                    corpus_line = (
-                        f"[{r.source}] {r.entity_type} '{r.entity_value}' "
-                        f"found on {platform}"
-                        + (f" at {r.url}" if r.url else "")
-                        + (f" meta={json.dumps(r.metadata)}" if r.metadata else "")
-                    )
-                    text_corpus.append(corpus_line)
-                print(f"[OSINT] MCP tools returned {len(mcp_findings)} findings.")
-            except asyncio.TimeoutError:
-                print("[OSINT] MCP tools timed out (120s). Continuing without them.")
-            except Exception as e:
-                print(f"[OSINT] MCP tools error: {e}")
-
-        # --- Ollama + new_version MCP search (additional identity layer) ---
-        # Runs the new_version/ollama_mcp_client.py pipeline programmatically.
-        # Ollama picks the right tools (Sherlock, Holehe, Maigret, etc.) and
-        # calls them via the new_version/osint-tools-mcp-server.
-        if self.ollama_mcp:
-            try:
-                ollama_mcp_findings = await asyncio.wait_for(
-                    self.ollama_mcp.search_identity(
-                        target_type, target_value,
-                        institution=institution,
-                        location=location
-                    ),
-                    timeout=300  # generous timeout for multi-tool MCP calls
-                )
-                for r in ollama_mcp_findings:
-                    platform = _platform_from_url(r.url or "") or r.platform or r.source
-                    source_links.append({
-                        "title": f"[{r.source.upper()}] {platform}: {r.url or r.entity_value}",
-                        "url": r.url or "",
-                        "category": "social" if r.entity_type == "username" else r.entity_type,
-                        "platform": platform,
-                        "confidence": r.confidence,
-                        "engine": r.source,
-                        "metadata": r.metadata or {},
-                    })
-                    corpus_line = (
-                        f"[{r.source}] {r.entity_type} '{r.entity_value}' "
-                        f"found on {platform}"
-                        + (f" at {r.url}" if r.url else "")
-                        + (f" meta={json.dumps(r.metadata)}" if r.metadata else "")
-                    )
-                    text_corpus.append(corpus_line)
-                    mcp_findings.append(r)  # merge into mcp_findings for correlation
-                if ollama_mcp_findings:
-                    print(f"[OSINT] Ollama-MCP layer returned {len(ollama_mcp_findings)} findings.")
-            except asyncio.TimeoutError:
-                print("[OSINT] Ollama-MCP layer timed out (150s). Continuing without it.")
-            except Exception as e:
-                print(f"[OSINT] Ollama-MCP layer error: {e}")
+        # AgentWorkflow will be called after initial search data is gathered
 
         # --- GitHub API (name or username) ---
         if target_type in ("name", "username"):
@@ -687,6 +583,52 @@ class EntityProfiler:
             print(f"Internal OCR cross-link failure: {e}")
 
         corpus_text = " ".join(text_corpus)
+        
+        # --- Transfer control to agent_workflow ReAct loop ---
+        import sys
+        import os
+        workflow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "agent_workflow"))
+        if workflow_path not in sys.path:
+            sys.path.insert(0, workflow_path)
+            
+        agent_json_data = {}
+        try:
+            from agent_workflow.api import execute_query
+            print(f"[AgentWorkflow] Transferring control to ReAct Agent with search context...")
+            step_report, session_history = execute_query(
+                query=target_value, 
+                context=corpus_text[:8000] # Pass up to 8k chars of search context
+            )
+            
+            # Incorporate agent's deep reasoning into the corpus
+            agent_json_data = {}
+            if step_report and step_report.get("summary"):
+                raw_summary = step_report['summary']
+                # Try to extract JSON from the agent's summary
+                import re
+                json_match = re.search(r'(\{.*\})', raw_summary, re.DOTALL)
+                if json_match:
+                    try:
+                        agent_json_data = json.loads(json_match.group(1))
+                    except json.JSONDecodeError:
+                        pass
+                        
+                text_corpus.append(f"\n[Agent Investigation Summary]\n{raw_summary}")
+                
+            # Log the agent's tool outputs
+            for act in session_history:
+                if act.get("action") == "tool_execution":
+                    tool = act.get("tool")
+                    for out in act.get("outputs", []):
+                        val = out.get("output")
+                        if isinstance(val, str) and len(val) > 0:
+                            text_corpus.append(f"[{tool} Agent Data]: {val[:500]}")
+                            
+            # Re-compile corpus text with agent's findings for the Entity Extraction phase
+            corpus_text = " ".join(text_corpus)
+            
+        except Exception as e:
+            print(f"[AgentWorkflow] ReAct Agent integration failed: {e}")
 
         # --- Entity extraction: LLM-first, regex fallback ---
         extracted = await self._extract_entities_smart(
@@ -704,16 +646,7 @@ class EntityProfiler:
             if gp.get("company"):
                 extracted["affiliations"].append(gp["company"])
 
-        # --- Inject MCP tool findings into extracted entities ---
-        for r in mcp_findings:
-            if r.entity_type == "email" and r.entity_value not in extracted["email"]:
-                extracted["email"].append(r.entity_value)
-            elif r.entity_type == "domain" and r.entity_value not in extracted["domain"]:
-                extracted["domain"].append(r.entity_value)
-            elif r.entity_type == "ip_address" and r.entity_value not in extracted["ip_address"]:
-                extracted["ip_address"].append(r.entity_value)
-            if r.platform and r.platform not in extracted["preferred_platforms"]:
-                extracted["preferred_platforms"].append(r.platform)
+
 
         # Deduplicate
         for k in extracted:
@@ -727,7 +660,7 @@ class EntityProfiler:
         llm_profile = {}
         if self.llm:
             try:
-                tool_summary = self._build_tool_summary(mcp_findings, source_links)
+                tool_summary = self._build_tool_summary(source_links)
                 platform_names = list({
                     sl.get("platform", "") for sl in source_links if sl.get("platform")
                 })
@@ -782,6 +715,7 @@ class EntityProfiler:
             "threat_assessment": threat,
             "github_profiles": github_profiles,
             "llm_profile": llm_profile,
+            "agent_structured_data": agent_json_data,
             "metadata": {
                 "processing_time": processing_time,
                 "corpus_size": len(corpus_text),
@@ -790,11 +724,11 @@ class EntityProfiler:
                 "institution": institution,
                 "location": location,
                 "source_count": len(source_links),
-                "mcp_findings_count": len(mcp_findings),
+                "mcp_findings_count": 0,
                 "llm_provider": type(self.llm).__name__ if self.llm else "none",
                 "llm_enabled": self.llm is not None,
-                "ollama_mcp_enabled": self.ollama_mcp is not None,
-                "ollama_model": getattr(self.ollama_mcp, "ollama_model", "none") if self.ollama_mcp else "none",
+                "ollama_mcp_enabled": False,
+                "ollama_model": "none",
             }
         }
 
@@ -875,18 +809,9 @@ class EntityProfiler:
             print(f"[OSINT] LLM entity extraction error: {e}. Falling back to regex.")
             return regex_extracted
 
-    def _build_tool_summary(self, mcp_findings, source_links) -> str:
+    def _build_tool_summary(self, source_links) -> str:
         """Build a concise text summary of what tools found for LLM comprehension."""
         parts = []
-        tools_used = list(dict.fromkeys(f.source for f in mcp_findings))
-        if tools_used:
-            parts.append(f"MCP Tools used: {', '.join(tools_used)}.")
-        by_source = {}
-        for f in mcp_findings:
-            by_source.setdefault(f.source, []).append(f.platform or f.entity_type)
-        for src, platforms in by_source.items():
-            unique_plats = list(dict.fromkeys(platforms))[:8]
-            parts.append(f"{src}: found on {', '.join(unique_plats)}.")
         social_links = [sl for sl in source_links if sl.get("category") == "social"]
         if social_links:
             parts.append(f"{len(social_links)} social media profile links discovered.")

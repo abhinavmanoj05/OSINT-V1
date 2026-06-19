@@ -64,31 +64,39 @@ class DuckDuckGoClient:
     Falls back to LangChain DuckDuckGoSearchResults if DDGS is rate-limited.
     """
 
-    def _ddgs_search_sync(self, query: str, max_results: int, retries: int = 2) -> list:
-        """Synchronous DDGS call with retry, then LangChain DDG fallback on rate limit."""
+    def _ddgs_search_sync(self, query: str, max_results: int, retries: int = 3) -> list:
+        """Synchronous DDGS call using core proxy config, then LangChain DDG fallback on rate limit."""
         try:
             from duckduckgo_search import DDGS
             from duckduckgo_search.exceptions import DuckDuckGoSearchException
+            from backend.core.proxy_config import PROXY
             import time
 
             for attempt in range(retries + 1):
+                proxy = PROXY.as_aiohttp_proxy()
                 try:
-                    with DDGS() as ddgs:
-                        return list(ddgs.text(query, max_results=max_results))
+                    proxy_kwargs = {"proxy": proxy} if proxy else {}
+                    
+                    with DDGS(**proxy_kwargs) as ddgs:
+                        results = list(ddgs.text(query, max_results=max_results))
+                        return results
                 except DuckDuckGoSearchException as e:
-                    if ('202' in str(e) or 'Ratelimit' in str(e)) and attempt < retries:
-                        wait = 2 ** attempt
-                        print(f"[DDGS] Rate limited on '{query[:50]}', retrying in {wait}s...")
-                        time.sleep(wait)
+                    if ('202' in str(e) or 'Ratelimit' in str(e) or 'timeout' in str(e).lower() or 'proxy' in str(e).lower()) and attempt < retries:
+                        print(f"[DDGS] Rate limited/Failed on proxy '{proxy}', retrying...")
+                        time.sleep(1)
                         continue
+                    
                     # Rate limit exhausted after retries — fall through to LangChain
-                    print(f"[DDGS] Rate limit exhausted for '{query[:60]}'. Trying LangChain DDG...")
+                    print(f"[DDGS] Exhausted for '{query[:60]}'. Trying LangChain DDG...")
                     return self._langchain_ddg_search_sync(query, max_results)
                 except Exception as e:
+                    if attempt < retries:
+                        time.sleep(1)
+                        continue
                     print(f"[DDGS] search error for '{query[:60]}': {e}")
                     return []
         except ImportError:
-            print("[DDGS] duckduckgo-search not installed. Trying LangChain DDG...")
+            print("[DDGS] ddgs not installed. Trying LangChain DDG...")
             return self._langchain_ddg_search_sync(query, max_results)
         return []
 
@@ -125,6 +133,16 @@ class DuckDuckGoClient:
             print(f"[LangChain-DDG] fallback failed for '{query[:60]}': {e}")
             return []
 
+    from functools import wraps
+    try:
+        from aiocache import cached, Cache
+    except ImportError:
+        def cached(*args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+
+    @cached(ttl=3600, cache=Cache.MEMORY)
     async def search(self, query: str, max_results: int = 20) -> List[SearchResult]:
         import random
         try:
@@ -214,7 +232,7 @@ async def _build_persona_queries(search_fn, **kwargs) -> Dict[str, List[SearchRe
         async with sem:
             try:
                 res = await search_fn(query, max_results=10)
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(2.5)
                 return key, res
             except Exception as e:
                 print(f"[DDGS] Error on '{key}' search: {e}")
