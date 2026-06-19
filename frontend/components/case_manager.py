@@ -10,9 +10,9 @@ from frontend.utils.api_client import api_client
 
 def render_case_manager():
     """Render case management interface"""
-    st.header("📁 Case Management")
+    st.header("Case Management")
 
-    tab1, tab2, tab3 = st.tabs(["➕ Create Case", "📋 View Cases", "🔍 Case Details"])
+    tab1, tab2, tab3 = st.tabs(["Create Case", "View Cases", "Case Details"])
 
     with tab1:
         _render_create_case()
@@ -37,7 +37,7 @@ def _render_target_profile_form(prefix: str = "", defaults: Optional[Dict] = Non
     """
     d = defaults or {}
 
-    st.markdown("#### 🎯 Suspect / Target Profile")
+    st.markdown("#### Suspect / Target Profile")
     st.caption(
         "Fill in as many identifiers as known. These seed the OSINT engine automatically "
         "when you launch an investigation from this case."
@@ -405,7 +405,8 @@ def _render_case_details():
                     st.session_state.selected_case = upd_result
                     for key in ("current_case", "investigation_case",
                                 "evidence_case", "network_case"):
-                        if st.session_state.get(key, {}).get("id") == case["id"]:
+                        state_val = st.session_state.get(key)
+                        if state_val and isinstance(state_val, dict) and state_val.get("id") == case["id"]:
                             st.session_state[key] = upd_result
                     st.rerun()
                 else:

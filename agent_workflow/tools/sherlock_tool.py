@@ -33,11 +33,16 @@ def username_osint(username: str):
     """
     try:
         import os
+        from backend.core.proxy_config import PROXY
+        env = os.environ.copy()
+        env.update(PROXY.as_env_vars())
+
         result = subprocess.run(
             ["sherlock", username, "--output", os.devnull],
             capture_output=True,
             text=True,
-            timeout=180
+            timeout=180,
+            env=env
         )
 
         lines = result.stdout.splitlines()

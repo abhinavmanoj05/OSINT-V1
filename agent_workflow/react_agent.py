@@ -22,10 +22,11 @@ Process:
 2. Based on the target type and initial context, invoke the appropriate tools to gather deeper insights.
 3. If you find URLs or social profiles, use 'scrape_profile' to extract text.
 4. If you find emails, verify them with 'email_osint'.
-5. Once you have a comprehensive profile, provide a final, detailed summary report containing:
+5. Once you have a comprehensive profile, provide a final, detailed summary report containing the entities you found.
 
-IMPORTANT: Your final output MUST be in strict JSON format. Do not write text outside of the JSON block.
-The JSON must follow this exact structure:
+CRITICAL INSTRUCTION:
+Do NOT output the final JSON format until you have completely finished using tools and gathering data. 
+When you are ready to deliver the final report, your final message MUST be exactly and ONLY this strict JSON structure:
 {
   "confirmed_entities": [
     {
@@ -46,8 +47,6 @@ The JSON must follow this exact structure:
   "opsec_warnings": ["Warning 1"],
   "recommended_next_steps": ["Step 1"]
 }
-
-Remember to ALWAYS call a tool if you need more data. Only output the final JSON when you have exhausted useful tool queries.
 """
     
     tools = list(tool_map.values())

@@ -10,14 +10,22 @@ from tools.whois_tool import whois_lookup
 from core.llm import get_llm
 
 tools = [
-    scrape_profile
+    scrape_profile,
+    username_osint,
+    email_osint,
+    dns_lookup,
+    whois_lookup
 ]
 
 llm = get_llm()
 
-agent = create_react_agent(
+agent_executor = create_react_agent(
     model=llm,
     tools=tools,
+)
+
+def agent_invoke(inputs: dict):
+    from langchain_core.messages import SystemMessage
     system_prompt = """
     ROLE
     You are a web scraping agent.
@@ -38,4 +46,12 @@ agent = create_react_agent(
     OUTPUT
     Return valid JSON whenever possible.
     """
-)
+    messages = [SystemMessage(content=system_prompt)] + inputs.get("messages", [])
+    return agent_executor.invoke({"messages": messages})
+
+# Expose agent with a compatible invoke interface
+class AgentWrapper:
+    def invoke(self, inputs):
+        return agent_invoke(inputs)
+
+agent = AgentWrapper()

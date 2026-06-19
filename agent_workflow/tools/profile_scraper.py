@@ -30,10 +30,15 @@ def scrape_profile(url: str):
     # 1. CURL_CFFI (Fast, lightweight Chrome impersonation)
     # --------------------------------
     try:
+        from backend.core.proxy_config import PROXY
+        proxy_url = PROXY._get_proxy_url()
+        proxies = {"all": proxy_url} if proxy_url else None
+
         resp = curl_requests.get(
             url,
             timeout=15,
-            impersonate="chrome110"
+            impersonate="chrome110",
+            proxies=proxies
         )
 
         resp.raise_for_status()
@@ -55,25 +60,56 @@ def scrape_profile(url: str):
         )
         desc = desc[0].strip() if desc else None
 
+        # Clean scripts and styles to extract visible text
+        for element in tree.xpath('//script | //style | //noscript | //meta | //link'):
+            if element.getparent() is not None:
+                element.getparent().remove(element)
+        
+        # Extract visible text and truncate to avoid blowing up the LLM context
+        body_text = " ".join(tree.text_content().split())[:15000]
+
         return {
             "url": url,
             "status_code": resp.status_code,
             "title": title,
             "h1": h1,
             "description": desc,
+            "content": body_text,
             "source": "curl_cffi"
         }
 
     except Exception as e:
         curl_cffi_error = str(e)
         # Proceed to Playwright fallback
+        if any(err in curl_cffi_error.lower() for err in ["cloudflare", "403", "429", "just a moment"]):
+            try:
+                from backend.core.proxy_config import PROXY
+                PROXY.renew_tor_identity()
+                import time
+                time.sleep(2)
+            except Exception:
+                pass
 
     # --------------------------------
     # 2. PATCHRIGHT (Heavyweight browser-based fallback)
     # --------------------------------
     try:
+        import sys
+        import asyncio
+        if sys.platform == "win32":
+            try:
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            except Exception:
+                pass
+
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            from backend.core.proxy_config import PROXY
+            proxy_url = PROXY._get_proxy_url()
+            proxy_args = {}
+            if proxy_url:
+                proxy_args = {"proxy": {"server": proxy_url}}
+
+            browser = p.chromium.launch(headless=True, **proxy_args)
 
             try:
                 page = browser.new_page()
@@ -102,12 +138,15 @@ def scrape_profile(url: str):
                         return meta ? meta.content : null;
                     }
                 """)
+                
+                body_text = page.evaluate("() => document.body ? document.body.innerText.substring(0, 15000) : ''")
 
                 return {
                     "url": url,
                     "title": title,
                     "h1": h1,
                     "description": desc,
+                    "content": body_text,
                     "source": "patchright",
                     "curl_cffi_error": curl_cffi_error
                 }

@@ -29,6 +29,8 @@ class SearxngClient:
     async def search(self, query: str, categories: Optional[List[str]] = None,
                      engines: Optional[List[str]] = None, pages: int = 1) -> List[SearchResult]:
         results = []
+        from backend.core.proxy_config import PROXY
+        proxy = PROXY.as_aiohttp_proxy()
         async with aiohttp.ClientSession() as session:
             for page in range(1, pages + 1):
                 params = {'q': query, 'format': 'json', 'pageno': page, 'safesearch': '0'}
@@ -38,7 +40,14 @@ class SearxngClient:
                     params['engines'] = ','.join(engines)
                 try:
                     async with session.get(self.search_endpoint, params=params,
+                                           proxy=proxy,
                                            timeout=aiohttp.ClientTimeout(total=30)) as response:
+                        if response.status == 429:
+                            print(f"[SearXNG] 429 Rate Limit on page {page}. Renewing Tor identity...")
+                            from backend.core.proxy_config import PROXY
+                            PROXY.renew_tor_identity()
+                            await asyncio.sleep(2)
+                            continue
                         if response.status == 200:
                             data = await response.json()
                             for r in data.get('results', []):
@@ -67,8 +76,8 @@ class DuckDuckGoClient:
     def _ddgs_search_sync(self, query: str, max_results: int, retries: int = 3) -> list:
         """Synchronous DDGS call using core proxy config, then LangChain DDG fallback on rate limit."""
         try:
-            from duckduckgo_search import DDGS
-            from duckduckgo_search.exceptions import DuckDuckGoSearchException
+            from ddgs import DDGS
+            from ddgs.exceptions import DDGSException
             from backend.core.proxy_config import PROXY
             import time
 
@@ -80,10 +89,15 @@ class DuckDuckGoClient:
                     with DDGS(**proxy_kwargs) as ddgs:
                         results = list(ddgs.text(query, max_results=max_results))
                         return results
-                except DuckDuckGoSearchException as e:
+                except DDGSException as e:
                     if ('202' in str(e) or 'Ratelimit' in str(e) or 'timeout' in str(e).lower() or 'proxy' in str(e).lower()) and attempt < retries:
                         print(f"[DDGS] Rate limited/Failed on proxy '{proxy}', retrying...")
-                        time.sleep(1)
+                        try:
+                            from backend.core.proxy_config import PROXY
+                            PROXY.renew_tor_identity()
+                        except Exception:
+                            pass
+                        time.sleep(2)
                         continue
                     
                     # Rate limit exhausted after retries — fall through to LangChain
@@ -106,6 +120,12 @@ class DuckDuckGoClient:
         Uses the 'ddgs' library under the hood (different request path,
         more resilient to rate limits). Returns DDGS-compatible dicts.
         """
+        from backend.core.proxy_config import PROXY
+        import os
+        proxy_env = PROXY.as_env_vars()
+        for k, v in proxy_env.items():
+            os.environ[k] = v
+            
         try:
             import warnings
             with warnings.catch_warnings():
@@ -150,17 +170,24 @@ class DuckDuckGoClient:
             # Random jitter to stagger concurrent persona queries
             await asyncio.sleep(random.uniform(0.1, 0.4))
             raw = await loop.run_in_executor(None, self._ddgs_search_sync, query, max_results)
-            return [
-                SearchResult(
+            clean_results = []
+            for r in raw:
+                url = r.get('href', r.get('url', ''))
+                if not url:
+                    continue
+                # Skip junk pages that DDG sometimes surfaces
+                junk_paths = ['/login', '/signup', '/recover', '/password', '/captcha', '/accounts/login', 'auth/login', 'signin']
+                if any(junk in url.lower() for junk in junk_paths):
+                    continue
+                    
+                clean_results.append(SearchResult(
                     title=r.get('title', ''),
-                    url=r.get('href', r.get('url', '')),
+                    url=url,
                     content=r.get('body', r.get('content', '')),
                     engine='duckduckgo',
                     published_date=r.get('published', '')
-                )
-                for r in raw
-                if r.get('href') or r.get('url')
-            ]
+                ))
+            return clean_results
         except Exception as e:
             print(f"[DDGS] async search error: {e}")
             return []

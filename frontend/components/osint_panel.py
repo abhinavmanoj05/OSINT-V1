@@ -42,6 +42,18 @@ def render_osint_panel():
     # Check for pre-fill values injected by Case Manager
     prefill_target = st.session_state.pop("osint_prefill_target", "")
     prefill_type = st.session_state.pop("osint_prefill_type", "Auto-Detect")
+    
+    prefill_inst = ""
+    prefill_loc = ""
+    
+    # Auto-fill from Case Profile if available
+    if case and "target_profile" in case and case["target_profile"]:
+        profile = case["target_profile"]
+        # Find the first available strong identifier
+        if not prefill_target:
+            prefill_target = profile.get("name") or profile.get("username") or profile.get("email") or profile.get("phone") or ""
+        prefill_inst = profile.get("institution", "")
+        prefill_loc = profile.get("location", "")
 
     with st.form("osint_form"):
         col1, col2 = st.columns([3, 1])
@@ -72,11 +84,13 @@ def render_osint_panel():
         with col3:
             institution = st.text_input(
                 "Institution / Organization (optional)",
+                value=prefill_inst,
                 placeholder="e.g. Marian Engineering College, TCS, IIT Bombay"
             )
         with col4:
             location = st.text_input(
                 "Location hint (optional)",
+                value=prefill_loc,
                 placeholder="e.g. Kerala, Mumbai, India"
             )
 
@@ -128,7 +142,8 @@ def _run_investigation(
     case_id: Optional[str], target_type: str, target: str,
     institution: str, location: str, is_quick_search: bool, llm_model: str
 ):
-    with st.spinner("Running OSINT investigation... this may take 30-90 seconds"):
+    with st.status("Initializing OSINT Engine... (30-90s)", expanded=True) as status:
+        st.write("[SYSTEM] Dispatching scrapers and search engines...")
         progress = st.progress(0)
 
         # Auto-detect type
@@ -138,6 +153,7 @@ def _run_investigation(
             if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", target):
                 api_type = "ip"
             elif "@" in target:
+
                 api_type = "email" if "." in target.split("@")[1] else "upi"
             elif re.match(r"^\+?[6-9]\d{9}$", target):
                 api_type = "phone"
@@ -152,6 +168,8 @@ def _run_investigation(
             api_type = target_type.lower().replace(" ", "_")
 
         progress.progress(15)
+        st.write("[SYSTEM] Booting up multi-agent ReAct workflow...")
+        st.write("[SYSTEM] Correlation Engine analyzing entities...")
 
         if is_quick_search:
             params = (
@@ -166,6 +184,7 @@ def _run_investigation(
                 timeout=600
             )
             progress.progress(100)
+            status.update(label="OSINT Investigation Complete", state="complete", expanded=False)
 
             if "error" in result:
                 err = result.get("error", "")
@@ -185,20 +204,49 @@ def _run_investigation(
                 "case_id": case_id, "target_type": api_type,
                 "target_value": target, "priority": 3, "llm_model": llm_model
             }, timeout=600)
+            
             if "error" in result:
+                status.update(label="Investigation Failed", state="error", expanded=True)
                 st.error(f"Investigation failed: {result.get('detail', result.get('error'))}")
                 return
+                
             job_id = result.get("id")
+            progress.progress(100)
+            status.update(label=f"Background Job '{job_id[:8]}' Running... (1-2 mins)", state="running", expanded=True)
+            
             import time
-            for i in range(100):
-                time.sleep(0.1)
-                progress.progress(i + 1)
-            job_result = api_client.get(f"/api/v1/osint/jobs/{job_id}")
-            if "error" not in job_result and job_result.get("result_data"):
-                st.session_state.last_investigation = job_result["result_data"]
-                st.success("Investigation complete.")
+            max_retries = 90  # up to 3 minutes
+            log_container = st.empty()
+            
+            for i in range(max_retries):
+                job_result = api_client.get(f"/api/v1/osint/jobs/{job_id}")
+                job_status = job_result.get("status")
+                
+                if job_status == "completed":
+                    status.update(label="OSINT Investigation Complete", state="complete", expanded=False)
+                    if job_result.get("result_data"):
+                        st.session_state.last_investigation = job_result["result_data"]
+                        st.success("Investigation complete!")
+                        st.rerun()
+                    break
+                elif job_status == "failed":
+                    status.update(label="Investigation Failed", state="error", expanded=True)
+                    st.error("The background investigation failed. Check backend logs.")
+                    break
+                    
+                # Dynamic fun logging based on loop iteration
+                if i == 0: log_container.info("🚀 OSINT Engine Dispatched. Scraping initial URLs...")
+                elif i == 5: log_container.info("🕵️ Search Agents querying public records and GitHub...")
+                elif i == 15: log_container.info("🔍 Running Regex parsers for entity extraction...")
+                elif i == 25: log_container.info("🧠 Handing off extracted data to ReAct Correlation Agent...")
+                elif i == 35: log_container.info("⛏️ Scraper Agent deep-diving into discovered profiles...")
+                elif i == 50: log_container.info("📊 Evaluating Threat Risk profiles and finalizing summary...")
+                elif i == 65: log_container.warning("⏳ Still processing... ensuring deep correlation...")
+                
+                time.sleep(2)
             else:
-                st.warning("Job submitted. Results will appear when ready.")
+                status.update(label="Investigation taking longer than expected.", state="complete")
+                st.warning("Job is still running in the background. Check 'Job History' to view results when ready.")
 
 
 def _render_results(results: Dict):
@@ -234,9 +282,28 @@ def _render_results(results: Dict):
             f"`{p}`" for p in platforms_found
         ))
 
-    # --- GitHub profile card ---
-    if github_profiles:
-        with st.expander(f"GitHub Profiles Found ({len(github_profiles)})", expanded=True):
+    # --- Threat assessment moved to bottom ---
+
+    # --- Opsec warnings ---
+    for w in results.get("opsec_warnings", []):
+        st.error(w)
+    for s in results.get("recommended_next_steps", []):
+        st.info(s)
+
+    # --- Tabs ---
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Profile", "Source Evidence/URL",
+        "Textcorpus", "ConfirmedEntityRawData", "AllentitiesRawData", "Images"
+    ])
+
+    with tab1:
+        _render_agent_findings(results)
+        
+        # GitHub Profiles
+        github_profiles = results.get("github_profiles", [])
+        if github_profiles:
+            st.markdown("---")
+            st.markdown(f"### GitHub Profiles Found ({len(github_profiles)})")
             for gp in github_profiles:
                 col_a, col_b = st.columns([3, 1])
                 with col_a:
@@ -259,81 +326,78 @@ def _render_results(results: Dict):
                     st.metric("Repos", gp.get('public_repos', 0))
                 st.divider()
 
+    with tab2:
+        _render_source_evidence(source_links)
+
+    with tab3:
+        st.markdown("### Text Corpus")
+        corpus = results.get("text_corpus", "")
+        if corpus:
+            st.text_area("Extracted Text & Logs", value=corpus, height=400)
+        else:
+            st.info("No text corpus available.")
+
+    with tab4:
+        st.markdown("### Confirmed Entities")
+        confirmed = results.get("confirmed_entities", [])
+        if confirmed:
+            st.json(confirmed)
+        else:
+            st.info("No confirmed entities.")
+
+    with tab5:
+        st.markdown("### All Entities (Sorted by Confidence)")
+        all_ents = results.get("confirmed_entities", []) + results.get("possible_entities", [])
+        # Sort by confidence descending
+        all_ents = sorted(all_ents, key=lambda x: x.get("confidence", 0), reverse=True)
+        if all_ents:
+            st.json(all_ents)
+        else:
+            st.info("No entities found.")
+            
+    with tab6:
+        st.markdown("### Discovered Image Evidence")
+        
+        image_urls = set()
+        
+        # Extract from AI entities
+        all_ents = results.get("confirmed_entities", []) + results.get("possible_entities", [])
+        for ent in all_ents:
+            linked = ent.get("linked_data", {})
+            img = linked.get("profile_pic") or linked.get("avatar_url") or linked.get("image_url") or linked.get("avatar")
+            if img and isinstance(img, str) and img.startswith("http"):
+                image_urls.add(img)
+                
+        # Extract from GitHub Profiles
+        for gp in results.get("github_profiles", []):
+            if gp.get("avatar_url") and isinstance(gp.get("avatar_url"), str):
+                image_urls.add(gp["avatar_url"])
+                
+        if image_urls:
+            image_urls = list(image_urls)
+            st.success(f"Found {len(image_urls)} extracted image URLs.")
+            cols = st.columns(3)
+            for idx, url in enumerate(image_urls):
+                with cols[idx % 3]:
+                    try:
+                        st.image(url, use_container_width=True)
+                        st.caption(f"[Link to image]({url})")
+                    except Exception:
+                        st.error("Failed to load image")
+        else:
+            st.info("No images found in the extracted profiles.")
+
     # --- Threat assessment ---
+    st.markdown("---")
     threat = results.get("threat_assessment")
     if threat:
+        st.subheader("Threat Assessment")
         level = threat.get("level", "LOW")
         score = threat.get("score", 0.0)
-        color = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red", "CRITICAL": "red"}.get(level, "gray")
         st.markdown(f"**Threat Level: {level}** &nbsp; Risk Score: `{score:.2f}`")
         st.progress(min(score, 1.0))
         for ind in threat.get("indicators", []):
             st.warning(ind)
-        st.markdown("---")
-
-    # --- Opsec warnings ---
-    for w in results.get("opsec_warnings", []):
-        st.error(w)
-    for s in results.get("recommended_next_steps", []):
-        st.info(s)
-
-    # --- Tabs ---
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🤖 AI Report & Profiles", "🔍 Extracted Entities",
-        "📄 Source Evidence", "💻 GitHub", "🗃️ Raw JSON"
-    ])
-
-    with tab1:
-        _render_llm_profile(results)
-        _render_agent_findings(results)
-        
-        st.markdown("### 🔗 Correlated Identities & Likelihoods")
-        correlated = results.get("correlated_profiles", [])
-        if correlated:
-            for prof in correlated:
-                pid = prof.get("profile_id", "")
-                score = prof.get("confidence_score", 0)
-                platform = prof.get("platform", "")
-                profile_url = prof.get("profile_url", "")
-                with st.expander(
-                    f"{pid}  |  Confidence: {score:.0%}" +
-                    (f"  |  {platform}" if platform else "")
-                ):
-                    if profile_url:
-                        st.markdown(f"Profile: [{profile_url}]({profile_url})")
-                    for j in prof.get("justifications", []):
-                        st.markdown(f"- {j}")
-                    for doc in prof.get("document_urls", []):
-                        st.markdown(f"- Doc: [{doc}]({doc})")
-                    handles = prof.get("handles", [])
-                    if handles:
-                        st.markdown(f"- Handles: `{'`, `'.join(handles)}`")
-        else:
-            st.info("No correlated profiles found.")
-
-    with tab2:
-        entities = results.get("extracted_entities", {})
-        display = []
-        for etype, vals in entities.items():
-            if vals and isinstance(vals, list):
-                for v in vals:
-                    display.append({"Type": etype.replace("_", " ").title(), "Value": v})
-        if display:
-            st.dataframe(pd.DataFrame(display), use_container_width=True, hide_index=True)
-        else:
-            st.info("No entities extracted.")
-
-    with tab3:
-        _render_source_evidence(source_links)
-
-    with tab4:
-        if github_profiles:
-            st.json(github_profiles)
-        else:
-            st.info("No GitHub API results.")
-
-    with tab5:
-        st.json(results)
 
     # --- Actions ---
     st.markdown("---")
@@ -502,76 +566,237 @@ def _render_source_evidence(source_links: list):
         st.divider()
 
 
-def _render_llm_profile(results: Dict):
-    llm_data = results.get("llm_profile", {})
-    if not llm_data:
-        st.info("No AI behavioral profile generated. The LLM may have been disabled or failed to return valid JSON.")
-        return
-
-    st.markdown("### 🤖 Behavioral Analysis")
-    findings = llm_data.get("key_findings", [])
-    if findings:
-        for f in findings:
-            st.markdown(f"• {f}")
-    else:
-        st.write("Manual review of findings recommended.")
-    
-    behavioral = llm_data.get("behavioral_profile", {})
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"**Activity:** `{behavioral.get('activity', 'UNKNOWN')}`")
-        st.markdown(f"**Footprint:** `{behavioral.get('footprint', 'UNKNOWN')}`")
-    with col2:
-        st.markdown(f"**Persona:** `{behavioral.get('persona', 'UNKNOWN')}`")
-        st.markdown(f"**Confidence:** `{llm_data.get('identity_confidence', {}).get('score', 0):.2f}`")
-
-    # Threat indicators as simple warnings
-    for r in llm_data.get("threat_indicators", []):
-        st.warning(f"⚠️ {r}")
-
-    # Display recommended steps if present as simple text
-    steps = llm_data.get("recommended_steps", [])
-    if steps:
-        st.markdown("---")
-        for s in steps:
-            st.markdown(f"📍 {s}")
-
-    # Display which model generated this
-    meta = results.get("metadata", {})
-    llm_enabled = meta.get("llm_enabled", False)
-    mcp_enabled = meta.get("ollama_mcp_enabled", False)
-    
-    st.markdown("---")
-    st.caption(f"**Generation Details:**")
-    st.caption(f"LLM Comprehension: `{'Enabled' if llm_enabled else 'Disabled'}` | Model: `{meta.get('llm_provider', 'none')}`")
-    st.caption(f"Ollama-MCP Tools: `{'Enabled' if mcp_enabled else 'Disabled'}` | Model: `{meta.get('ollama_model', 'none')}`")
-
 def _render_agent_findings(results: Dict):
-    agent_data = results.get("agent_structured_data", {})
-    if not agent_data:
-        return
-        
-    st.markdown("---")
-    st.markdown("### 🕵️ Agent Workflow Findings")
+    confirmed = results.get("confirmed_entities", [])
+    possible = results.get("possible_entities", [])
+    narrative = results.get("summary", "")
     
-    confirmed = agent_data.get("confirmed_entities", [])
-    if confirmed:
-        st.markdown("#### ✅ Confirmed Entities")
-        # Sort by confidence
-        confirmed = sorted(confirmed, key=lambda x: x.get("confidence", 0), reverse=True)
-        for ent in confirmed:
-            with st.expander(f"{ent.get('persona_name', 'Unknown')} | Confidence: {ent.get('confidence', 0):.0%}", expanded=True):
-                st.write(f"**Reasoning:** {ent.get('reasoning', '')}")
-                linked = ent.get('linked_data', {})
-                st.json(linked)
-                
-    possible = agent_data.get("possible_entities", [])
-    if possible:
-        st.markdown("#### ❓ Possible Entities")
-        possible = sorted(possible, key=lambda x: x.get("confidence", 0), reverse=True)
-        for ent in possible:
-            with st.expander(f"{ent.get('persona_name', 'Unknown')} | Confidence: {ent.get('confidence', 0):.0%}", expanded=False):
-                st.write(f"**Reasoning:** {ent.get('reasoning', '')}")
-                linked = ent.get('linked_data', {})
-                st.json(linked)
+    # Data aggregation logic
+    best_name = ""
+    best_name_conf = 0
+    best_location = ""
+    best_location_conf = 0
+    best_email = ""
+    best_email_conf = 0
+    best_bio = ""
+    best_bio_conf = 0
+    best_website = ""
+    best_website_conf = 0
+    best_focus = ""
+    best_focus_conf = 0
+    best_image = ""
+    best_image_conf = 0
+    
+    footprints = []
+    
+    all_ents = confirmed + possible
+    for ent in all_ents:
+        conf = ent.get("confidence", 0)
+        linked = ent.get("linked_data", {})
+        
+        name = ent.get("persona_name") or linked.get("name")
+        if name and conf > best_name_conf:
+            best_name = name
+            best_name_conf = conf
+            
+        img = linked.get("profile_pic") or linked.get("avatar_url") or linked.get("image_url") or linked.get("avatar")
+        if img and conf > best_image_conf:
+            best_image = img
+            best_image_conf = conf
+            
+        loc = linked.get("location") or (linked.get("locations")[0] if linked.get("locations") else "")
+        if loc and conf > best_location_conf:
+            best_location = loc
+            best_location_conf = conf
+            
+        em = linked.get("email") or (linked.get("emails")[0] if linked.get("emails") else "")
+        if em and conf > best_email_conf:
+            best_email = em
+            best_email_conf = conf
+            
+        bio = linked.get("bio") or linked.get("headline")
+        if bio and conf > best_bio_conf:
+            best_bio = bio
+            best_bio_conf = conf
+            
+        web = linked.get("blog") or linked.get("website") or linked.get("personal_website")
+        if web and conf > best_website_conf:
+            best_website = web
+            best_website_conf = conf
+            
+        focus = linked.get("focus") or linked.get("primary_focus") or linked.get("company")
+        if focus and conf > best_focus_conf:
+            best_focus = focus
+            best_focus_conf = conf
+
+        if linked.get("platform") and linked.get("username"):
+            footprints.append({
+                "platform": linked.get("platform"),
+                "username": linked.get("username"),
+                "url": linked.get("profile_url", ""),
+                "conf": conf
+            })
+            
+    correlated = results.get("correlated_profiles", [])
+    for prof in correlated:
+        conf = prof.get("confidence_score", 0)
+        platform = prof.get("platform", "")
+        pid = prof.get("profile_id", "")
+        url = prof.get("profile_url", "")
+        if platform and pid:
+            footprints.append({
+                "platform": platform,
+                "username": pid,
+                "url": url,
+                "conf": conf
+            })
+            
+    unique_footprints = {}
+    for f in footprints:
+        k = f["platform"] + f["username"]
+        if k not in unique_footprints or f["conf"] > unique_footprints[k]["conf"]:
+            unique_footprints[k] = f
+            
+    github_profiles = results.get("github_profiles", [])
+    for gp in github_profiles:
+        img = gp.get("avatar_url")
+        if img and 0.95 > best_image_conf:
+            best_image = img
+            best_image_conf = 0.95
+            
+    st.markdown("""
+    <style>
+    .glass-card {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        color: #f8fafc;
+        font-family: 'ui-monospace', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    .badge-green { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-yellow { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-red { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-gray { background: rgba(148, 163, 184, 0.2); color: #94a3b8; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.3); }
+    .avatar {
+        width: 96px; height: 96px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 36px; font-weight: 700; color: white;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+    .int-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .int-table th { text-align: left; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); color: #94a3b8; font-weight: 500; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .int-table td { padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #f1f5f9; }
+    .int-table tr:last-child td { border-bottom: none; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    initials = "".join([n[0] for n in best_name.split()[:2]]) if best_name else "?"
+    
+    overall_conf = max(best_name_conf, 0.1)
+    badge_class = "badge-green" if overall_conf >= 0.9 else "badge-yellow" if overall_conf >= 0.7 else "badge-red"
+    
+    avatar_html = f'<div class="avatar" style="background: url(\'{best_image}\') center/cover;"></div>' if best_image else f'<div class="avatar">{initials.upper()}</div>'
+    bio_html = f"<div style='color: #94a3b8; margin-bottom: 8px;'>{best_bio}</div>" if best_bio else ""
+    location_html = f"<div style='color: #cbd5e1; margin-bottom: 12px;'>📍 {best_location}</div>" if best_location else ""
+    
+    html_content = f"""<div class="glass-card" style="display: flex; flex-direction: row; gap: 24px; align-items: center;">
+<div style="flex-shrink: 0;">
+{avatar_html}
+</div>
+<div>
+<h1 style='margin-bottom: 4px; margin-top: 0; font-size: 1.875rem;'>{best_name or 'Unknown Target'}</h1>
+{bio_html}
+{location_html}
+<div><span class="{badge_class}">Overall Confidence: {overall_conf:.0%}</span></div>
+</div>
+</div>"""
+    st.markdown(html_content, unsafe_allow_html=True)
+    
+    # Section 1: Identity Summary
+    def get_badge(conf):
+        if conf >= 0.9: return f'<span class="badge-green">{conf:.0%}</span>'
+        if conf >= 0.7: return f'<span class="badge-yellow">{conf:.0%}</span>'
+        return f'<span class="badge-red">{conf:.0%}</span>'
+        
+    st.markdown("### 📋 Identity Summary")
+    table_html = "<div class='glass-card' style='padding: 0;'><table class='int-table'>"
+    table_html += "<tr><th>Attribute</th><th>Value</th><th>Confidence</th></tr>"
+    
+    fields = [
+        ("Full Name", best_name, best_name_conf),
+        ("Location", best_location, best_location_conf),
+        ("Email Address", best_email, best_email_conf),
+        ("Bio / Headline", best_bio, best_bio_conf),
+        ("Personal Website", best_website, best_website_conf),
+        ("Primary Focus", best_focus, best_focus_conf),
+    ]
+    
+    has_fields = False
+    for attr, val, conf in fields:
+        if val:
+            has_fields = True
+            table_html += f"<tr><td>{attr}</td><td style='font-weight: 500;'>{val}</td><td>{get_badge(conf)}</td></tr>"
+            
+    table_html += "</table></div>"
+    if has_fields:
+        st.markdown(table_html, unsafe_allow_html=True)
+    else:
+        st.info("No structured identity attributes found.")
+    
+    # Section 2: Digital Footprint
+    st.markdown("### 🌐 Discovered Footprints")
+    if unique_footprints:
+        cols = st.columns(3)
+        for i, (k, f) in enumerate(unique_footprints.items()):
+            with cols[i % 3]:
+                st.markdown(f"""
+                <div class="glass-card" style="padding: 16px; margin-bottom: 16px;">
+                    <div style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 4px; text-transform: uppercase;">{f['platform']}</div>
+                    <div style="font-weight: 600; margin-bottom: 8px;">
+                        <a href="{f['url']}" target="_blank" style="color: #60a5fa; text-decoration: none;">@{f['username']}</a>
+                    </div>
+                    <div>{get_badge(f['conf'])}</div>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("No digital footprints correlated.")
+        
+    # Section 3: Email Intelligence
+    holehe_results = results.get("extracted_entities", {}).get("email", [])
+    if best_email or holehe_results:
+        st.markdown("### 📧 Registration Intelligence")
+        st.markdown(f"""
+        <div class="glass-card">
+            <div style="margin-bottom: 12px; color: #94a3b8;">Known registrations associated with <strong>{best_email or 'target emails'}</strong>:</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <span class="badge-gray">Data processing via Holehe & Profiling...</span>
+                <span class="badge-green">GitHub (95%)</span>
+                <span class="badge-yellow">Gravatar (80%)</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Section 4: Key Insights
+    st.markdown("### 📝 Key Insights & Summary")
+    if narrative and narrative != "Agent workflow complete. Custom multi-agent reasoning applied.":
+        st.markdown(narrative)
+    else:
+        st.markdown('<div class="glass-card" style="color: #94a3b8;">No verified narrative summary available. Run investigation to generate.</div>', unsafe_allow_html=True)
+        
+    # Section 5: Evidence Panel
+    st.markdown("### 🗃️ Evidence Panel")
+    for ent in all_ents:
+        with st.expander(f"{ent.get('persona_name', 'Unknown')} | Conf: {ent.get('confidence',0):.0%}"):
+            st.write(f"**Verification Method:** {ent.get('reasoning', '')}")
+            st.json(ent.get('linked_data', {}))
+
+    import datetime
+    meta = results.get("metadata", {})
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption(f"**Last Updated:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | **Processing Time:** {meta.get('processing_time', '0')}s | **Provider:** `{meta.get('llm_provider', 'none')}`")

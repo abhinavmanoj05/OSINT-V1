@@ -29,11 +29,17 @@ def email_osint(email: str):
     - Requires Holehe installed in system PATH
     """
     try:
+        import os
+        from backend.core.proxy_config import PROXY
+        env = os.environ.copy()
+        env.update(PROXY.as_env_vars())
+        
         result = subprocess.run(
             ["holehe", email, "--no-color"],
             capture_output=True,
             text=True,
-            timeout=180
+            timeout=180,
+            env=env
         )
 
         lines = result.stdout.splitlines()

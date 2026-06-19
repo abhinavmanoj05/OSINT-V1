@@ -84,12 +84,24 @@ def run_osint_investigation(self, job_id: str, target_type: str, target_value: s
                 await db.commit()
                 logger.info(f"Job {job_id} status updated to 'running'.")
                 
+                from backend.models.case import Case
+                case_result = await db.execute(select(Case).where(Case.id == job.case_id))
+                case_obj = case_result.scalar_one_or_none()
+                
+                institution = ""
+                location = ""
+                if case_obj and case_obj.target_profile:
+                    profile = case_obj.target_profile
+                    if isinstance(profile, dict):
+                        institution = profile.get("institution", "")
+                        location = profile.get("location", "")
+                
                 from backend.services.osint_engine import EntityProfiler
                 
                 profiler = EntityProfiler(llm_model=llm_model)
-                logger.info(f"Profiling target '{target_value}' of type '{target_type}'")
+                logger.info(f"Profiling target '{target_value}' of type '{target_type}' (Institution: '{institution}', Location: '{location}')")
                 
-                result_data = await profiler.profile_target(target_type, target_value)
+                result_data = await profiler.profile_target(target_type, target_value, institution=institution, location=location)
                 
                 job.status = "completed"
                 job.result_data = result_data

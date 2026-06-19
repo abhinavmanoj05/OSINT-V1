@@ -6,5 +6,5 @@ def get_llm():
         temperature=0,
         streaming=False,
         top_p=0.9,
-        num_ctx=4096
+        num_ctx=8192 #32768 for larger context window
     )

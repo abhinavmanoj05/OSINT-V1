@@ -112,7 +112,7 @@ def _render_document_results(result: Dict):
         regex_entities = processing.get("extracted_entities", [])
         
         if llm_entities:
-            st.markdown("### 🧠 LLM-Extracted Entities")
+            st.markdown("### LLM-Extracted Entities")
             for category, items in llm_entities.items():
                 if items:
                     st.markdown(f"**{category.replace('_', ' ').title()}**")
@@ -120,7 +120,7 @@ def _render_document_results(result: Dict):
             st.markdown("---")
         
         if regex_entities:
-            st.markdown("### 🔍 Regex Extracted Entities")
+            st.markdown("### Regex Extracted Entities")
             df = pd.DataFrame([
                 {
                     "Type": e.get("entity_type", "Unknown"),
@@ -182,7 +182,7 @@ def _render_document_results(result: Dict):
         summary = llm_analysis.get("summary", "") if llm_analysis else ""
         
         if summary:
-            st.markdown("### 📝 Summary")
+            st.markdown("### Summary")
             st.write(summary)
             st.markdown("---")
             

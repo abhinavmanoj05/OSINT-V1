@@ -402,15 +402,7 @@ class EntityProfiler:
             pass
         return DuckDuckGoClient()
 
-    @property
-    def llm(self):
-        """Lazy-load LLM provider to avoid import errors at startup."""
-        if self._llm is None:
-            from backend.services.llm_comprehension import OllamaProvider
-            host = getattr(settings, "OLLAMA_HOST", "http://localhost:11434")
-            model = self.llm_model or getattr(settings, "OLLAMA_MODEL", "qwen2.5")
-            self._llm = OllamaProvider(host=host, model=model)
-        return self._llm
+    # LLM property removed; relies 100% on ReAct agent
 
     async def profile_target(
         self,
@@ -592,37 +584,55 @@ class EntityProfiler:
             sys.path.insert(0, workflow_path)
             
         agent_json_data = {}
+        confirmed_entities = []
+        possible_entities = []
+        agent_summary_text = ""
         try:
             from agent_workflow.api import execute_query
             print(f"[AgentWorkflow] Transferring control to ReAct Agent with search context...")
+            
+            enhanced_context = f"Target Type: {target_type}\n"
+            if institution: enhanced_context += f"Institution: {institution}\n"
+            if location: enhanced_context += f"Location: {location}\n"
+            enhanced_context += f"\nBackend Corpus:\n{corpus_text[:8000]}"
+            
             step_report, session_history = execute_query(
                 query=target_value, 
-                context=corpus_text[:8000] # Pass up to 8k chars of search context
+                context=enhanced_context
             )
             
-            # Incorporate agent's deep reasoning into the corpus
-            agent_json_data = {}
-            if step_report and step_report.get("summary"):
-                raw_summary = step_report['summary']
-                # Try to extract JSON from the agent's summary
+            # Incorporate agent's deep reasoning
+            if step_report:
+                agent_json_data = step_report.get("agent_structured_data", {})
+                confirmed_entities = step_report.get("confirmed_entities", [])
+                possible_entities = step_report.get("possible_entities", [])
+                
+                # Merge opsec and next steps early
+                opsec_warnings.extend(step_report.get("opsec_warnings", []))
+                recommended_next_steps.extend(step_report.get("recommended_next_steps", []))
+                
+                # Strip the JSON payload from the raw summary so the secondary LLM doesn't get confused
+                raw_summary = step_report.get('summary', '')
                 import re
-                json_match = re.search(r'(\{.*\})', raw_summary, re.DOTALL)
-                if json_match:
-                    try:
-                        agent_json_data = json.loads(json_match.group(1))
-                    except json.JSONDecodeError:
-                        pass
-                        
-                text_corpus.append(f"\n[Agent Investigation Summary]\n{raw_summary}")
+                clean_summary = re.sub(r'(\{.*\})', '', raw_summary, flags=re.DOTALL).strip()
+                if clean_summary:
+                    agent_summary_text = clean_summary
+                    text_corpus.append(f"\n[Agent Investigation Summary]\n{clean_summary}")
                 
             # Log the agent's tool outputs
             for act in session_history:
-                if act.get("action") == "tool_execution":
+                if isinstance(act, dict) and act.get("action") == "tool_execution":
                     tool = act.get("tool")
                     for out in act.get("outputs", []):
                         val = out.get("output")
                         if isinstance(val, str) and len(val) > 0:
                             text_corpus.append(f"[{tool} Agent Data]: {val[:500]}")
+                elif isinstance(act, str):
+                    text_corpus.append(f"[Agent Action]: {act}")
+                    
+            if step_report and step_report.get("raw_data"):
+                for raw_out in step_report.get("raw_data", []):
+                    text_corpus.append(f"[Agent Raw Output]:\n{raw_out}")
                             
             # Re-compile corpus text with agent's findings for the Entity Extraction phase
             corpus_text = " ".join(text_corpus)
@@ -630,8 +640,9 @@ class EntityProfiler:
         except Exception as e:
             print(f"[AgentWorkflow] ReAct Agent integration failed: {e}")
 
-        # --- Entity extraction: LLM-first, regex fallback ---
-        extracted = await self._extract_entities_smart(
+        # --- Entity extraction: Strict Regex baseline ---
+        # The deep LLM extraction is now fully handled by the ReAct Agent in agent_workflow.
+        extracted = self._extract_entities(
             corpus_text, target_type, target_value, institution, location
         )
 
@@ -645,6 +656,8 @@ class EntityProfiler:
                 extracted["username"].append(gp["login"])
             if gp.get("company"):
                 extracted["affiliations"].append(gp["company"])
+                
+            pass
 
 
 
@@ -657,31 +670,8 @@ class EntityProfiler:
         threat = self._evaluate_threat_profile(extracted, text_corpus)
 
         # --- LLM Profile Comprehension (behavioral profile + narrative) ---
+        # REMOVED: Outer summarization has been disabled. We now rely exclusively on the ReAct agent's summary.
         llm_profile = {}
-        if self.llm:
-            try:
-                tool_summary = self._build_tool_summary(source_links)
-                platform_names = list({
-                    sl.get("platform", "") for sl in source_links if sl.get("platform")
-                })
-                llm_profile = await asyncio.wait_for(
-                    self.llm.comprehend_profile(
-                        target_type=target_type,
-                        target_value=target_value,
-                        entities=extracted,
-                        source_platforms=platform_names,
-                        tool_summary=tool_summary
-                    ),
-                    timeout=180
-                )
-                # Merge LLM recommended steps + opsec into our lists
-                opsec_warnings.extend(llm_profile.get("opsec_warnings", []))
-                recommended_next_steps.extend(llm_profile.get("recommended_next_steps", []))
-                print(f"[OSINT] LLM comprehension complete.")
-            except asyncio.TimeoutError:
-                print("[OSINT] LLM comprehension timed out (180s). Skipping.")
-            except Exception as e:
-                print(f"[OSINT] LLM comprehension error: {e}")
 
         # --- Real correlation ---
         correlated = self._correlate_profiles(extracted, source_links, target_type, target_value, threat)
@@ -701,9 +691,15 @@ class EntityProfiler:
                 seen.add(clean_f.lower())
         
         unique_findings = unique_findings[:12]
-        unified_summary = "\n".join([f"• {f}" for f in unique_findings])
+        
+        # Prefer the ReAct agent's narrative summary; fallback to bullet points if missing
+        if agent_summary_text:
+            unified_summary = agent_summary_text
+        else:
+            unified_summary = "\n".join([f"• {f}" for f in unique_findings])
 
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        from datetime import timezone
+        processing_time = (datetime.now(timezone.utc).replace(tzinfo=None) - start_time).total_seconds()
 
         return {
             "summary": unified_summary or "Intelligence analysis complete (manual review recommended).",
@@ -716,6 +712,9 @@ class EntityProfiler:
             "github_profiles": github_profiles,
             "llm_profile": llm_profile,
             "agent_structured_data": agent_json_data,
+            "confirmed_entities": confirmed_entities,
+            "possible_entities": possible_entities,
+            "text_corpus": corpus_text,
             "metadata": {
                 "processing_time": processing_time,
                 "corpus_size": len(corpus_text),
@@ -725,89 +724,15 @@ class EntityProfiler:
                 "location": location,
                 "source_count": len(source_links),
                 "mcp_findings_count": 0,
-                "llm_provider": type(self.llm).__name__ if self.llm else "none",
-                "llm_enabled": self.llm is not None,
+                "llm_provider": "ReAct Agent Workflow",
+                "llm_enabled": True,
                 "ollama_mcp_enabled": False,
                 "ollama_model": "none",
             }
         }
 
 
-    # -----------------------------------------------------------------------
-    async def _extract_entities_smart(
-        self,
-        corpus_text: str,
-        target_type: str,
-        target_value: str,
-        institution: str = "",
-        location: str = ""
-    ) -> Dict[str, list]:
-        """
-        LLM-first entity extraction with automatic regex fallback.
-        The LLM understands context, sarcasm, aliases, multilingual names, etc.
-        Regex is used as a safety net if LLM is unavailable or fails.
-        """
-        # Always run regex extraction as baseline
-        regex_extracted = self._extract_entities(
-            corpus_text, target_type, target_value, institution, location
-        )
-
-        if not self.llm:
-            return regex_extracted
-
-        try:
-            llm_extracted = await asyncio.wait_for(
-                self.llm.extract_entities(
-                    corpus=corpus_text,
-                    target_type=target_type,
-                    target_value=target_value,
-                    institution=institution,
-                    location=location
-                ),
-                timeout=60
-            )
-
-            if not llm_extracted:
-                print("[OSINT] LLM entity extraction returned empty. Using regex.")
-                return regex_extracted
-
-            # Merge: LLM results take priority, regex fills gaps
-            merged = {}
-            all_keys = set(list(regex_extracted.keys()) + list(llm_extracted.keys()))
-            for key in all_keys:
-                llm_val = llm_extracted.get(key, [])
-                regex_val = regex_extracted.get(key, [])
-                if isinstance(llm_val, list) and isinstance(regex_val, list):
-                    # Union of both, LLM entries first
-                    combined = list(dict.fromkeys(
-                        [str(v).strip() for v in (llm_val + regex_val) if v and str(v).strip()]
-                    ))
-                    merged[key] = combined
-                elif isinstance(llm_val, str) and llm_val:
-                    merged[key] = llm_val  # e.g. 'summary' field
-                elif isinstance(regex_val, list):
-                    merged[key] = regex_val
-                else:
-                    merged[key] = llm_val or regex_val
-
-            # Preserve regex-found IPs and financial IDs (high-precision regex patterns)
-            for precise_key in ("ip_address", "crypto_wallet", "bank_account_id", "upi_id"):
-                if regex_extracted.get(precise_key):
-                    existing = set(merged.get(precise_key, []))
-                    for v in regex_extracted[precise_key]:
-                        existing.add(v)
-                    merged[precise_key] = list(existing)
-
-            print(f"[OSINT] LLM entity extraction complete. "
-                  f"LLM found {sum(len(v) if isinstance(v,list) else 1 for v in llm_extracted.values())} items.")
-            return merged
-
-        except asyncio.TimeoutError:
-            print("[OSINT] LLM entity extraction timed out (60s). Falling back to regex.")
-            return regex_extracted
-        except Exception as e:
-            print(f"[OSINT] LLM entity extraction error: {e}. Falling back to regex.")
-            return regex_extracted
+    # (LLM extraction method removed)
 
     def _build_tool_summary(self, source_links) -> str:
         """Build a concise text summary of what tools found for LLM comprehension."""
@@ -890,8 +815,8 @@ class EntityProfiler:
         # Emails
         extracted["email"].extend(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text))
 
-        # Phone numbers (10-14 digits, optional +)
-        extracted["phone_number"].extend(re.findall(r'(?<!\d)(\+?[6-9]\d{9}|\+?\d{10,14})(?!\d)', text))
+        # Phone numbers (Indian 10-digit starting with 6-9, OR international requiring a + sign)
+        extracted["phone_number"].extend(re.findall(r'(?<!\d)(?:[6-9]\d{9}|\+[1-9]\d{9,14})(?!\d)', text))
 
         # UPI IDs (separate from emails)
         upis = re.findall(r'[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}', text)
@@ -923,12 +848,12 @@ class EntityProfiler:
         )
         extracted["locations"].extend(re.findall(loc_pattern, text, re.IGNORECASE))
 
-        # Institutions — College/University/School
-        inst_pat = r'([A-Z][a-zA-Z\s]{2,40}(?:College|University|Institute|School|Academy|Polytechnic|IIT|NIT|AIIMS))'
+        # Institutions — College/University/School (Strict Title Case)
+        inst_pat = r'\b([A-Z][a-z]+(?: [A-Z][a-z]+){0,3}\s(?:College|University|Institute|School|Academy|Polytechnic|IIT|NIT|AIIMS))\b'
         extracted["institutions"].extend(re.findall(inst_pat, text))
 
-        # Affiliations — Company/Org
-        aff_pat = r'([A-Z][a-zA-Z\s]{2,30}(?:Company|Inc\.|Ltd\.|LLC|Technologies|Solutions|Systems|Pvt\.))'
+        # Affiliations — Company/Org (Strict Title Case)
+        aff_pat = r'\b([A-Z][a-z]+(?: [A-Z][a-z]+){0,3}\s(?:Company|Inc\.|Ltd\.|LLC|Technologies|Solutions|Systems|Pvt\.))\b'
         extracted["affiliations"].extend(re.findall(aff_pat, text))
 
         # Roll numbers / admission numbers (common Indian college patterns)
