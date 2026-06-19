@@ -1,0 +1,6 @@
+
+"find info about test@gmail.com"
+{
+  "task": "email_intel",
+  "target": "scraper_agent"
+}

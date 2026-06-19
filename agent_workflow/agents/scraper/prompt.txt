@@ -1,0 +1,15 @@
+This agent gets:
+
+{
+  "tools": ["dns_lookup", "whois_lookup"],
+  "input": "example.com"
+}
+
+and executes:
+
+dns_lookup
+whois_lookup
+
+NO reasoning
+NO planning
+ONLY execution

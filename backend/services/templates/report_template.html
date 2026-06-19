@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investigation Report - {{ case.case_number }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 40px;
+            color: #333;
+        }
+        .header {
+            background: #1e3a8a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .metric {
+            display: inline-block;
+            margin: 10px 20px;
+            padding: 10px;
+            background: #f3f4f6;
+            border-radius: 5px;
+        }
+        .risk-high { color: #dc2626; }
+        .risk-medium { color: #d97706; }
+        .risk-low { color: #16a34a; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #f3f4f6;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 0.8em;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Crime Analysis Mapper</h1>
+        <h2>Investigation Report</h2>
+        <p>Kerala Cyber Police Division</p>
+        <p>Generated: {{ generated_at }}</p>
+    </div>
+
+    <div class="section">
+        <h3>Case Information</h3>
+        <div class="metric">
+            <strong>Case Number:</strong> {{ case.case_number }}
+        </div>
+        <div class="metric">
+            <strong>Title:</strong> {{ case.title }}
+        </div>
+        <div class="metric">
+            <strong>Type:</strong> {{ case.crime_type }}
+        </div>
+        <div class="metric">
+            <strong>Status:</strong> {{ case.status }}
+        </div>
+        <div class="metric">
+            <strong>Assigned Officer:</strong> {{ case.assigned_officer }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>AI Narrative Summary</h3>
+        <p>{{ findings[0].summary if findings and findings[0].summary else "No AI summary generated." }}</p>
+    </div>
+
+    <div class="section">
+        <h3>OSINT Summary</h3>
+        <div class="metric">
+            <strong>Total Targets:</strong> {{ osint_summary.total_targets }}
+        </div>
+        <div class="metric">
+            <strong>Total Findings:</strong> {{ osint_summary.total_findings }}
+        </div>
+        <div class="metric">
+            <strong>Platforms Found:</strong> {{ osint_summary.unique_platforms }}
+        </div>
+        <div class="metric">
+            <strong>Average Risk Score:</strong> 
+            <span class="{% if osint_summary.average_risk_score > 0.7 %}risk-high{% elif osint_summary.average_risk_score > 0.4 %}risk-medium{% else %}risk-low{% endif %}">
+                {{ "%.2f"|format(osint_summary.average_risk_score) }}
+            </span>
+        </div>
+        <div class="metric">
+            <strong>High Risk Count:</strong> {{ osint_summary.high_risk_count }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Network Analysis Summary</h3>
+        <div class="metric">
+            <strong>Total Entities:</strong> {{ network_summary.total_entities }}
+        </div>
+        <div class="metric">
+            <strong>Relationships:</strong> {{ network_summary.total_relationships }}
+        </div>
+        <div class="metric">
+            <strong>Network Density:</strong> {{ "%.3f"|format(network_summary.density) }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Social Media Profile Links</h3>
+        {% if social_media_links %}
+        <table>
+            <tr>
+                <th>Platform</th>
+                <th>Handle/Username</th>
+                <th>URL</th>
+            </tr>
+            {% for sl in social_media_links %}
+            <tr>
+                <td>{{ sl.platform or "Unknown" }}</td>
+                <td>{{ sl.handle or "N/A" }}</td>
+                <td><a href="{{ sl.url }}" target="_blank">{{ sl.url }}</a></td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p>No social media profiles identified.</p>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h3>Detailed Findings</h3>
+        {% for finding in findings %}
+        <div style="margin-bottom: 20px; padding: 15px; background: #f9fafb; border-radius: 5px;">
+            <h4>Target: {{ finding.target_value }} ({{ finding.target_type }})</h4>
+            <p><strong>Risk Score:</strong> {{ finding.risk_score }}</p>
+            
+            {% if finding.digital_footprint %}
+            <h5>Digital Footprint:</h5>
+            <table>
+                <tr>
+                    <th>Platform</th>
+                    <th>URL</th>
+                    <th>Confidence</th>
+                </tr>
+                {% for fp in finding.digital_footprint %}
+                <tr>
+                    <td>{{ fp.platform }}</td>
+                    <td>{{ fp.url }}</td>
+                    <td>{{ "%.0f"|format(fp.confidence * 100) }}%</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="section">
+        <h3>Recommendations</h3>
+        <ul>
+        {% for rec in recommendations %}
+            <li>{{ rec }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>© 2024 Kerala Cyber Police Division</p>
+        <p>This report is confidential and intended for authorized law enforcement use only.</p>
+        <p>Generated by Crime Analysis Mapper v1.0.0</p>
+    </div>
+</body>
+</html>

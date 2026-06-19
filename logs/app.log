@@ -1,0 +1,423 @@
+2026-06-19 13:40:42,711 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 13:40:42,711 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 13:40:42,711 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,713 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("cases")
+2026-06-19 13:40:42,713 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,713 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 13:40:42,713 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,714 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("osint_jobs")
+2026-06-19 13:40:42,715 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,717 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 13:40:42,717 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,718 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("evidence_files")
+2026-06-19 13:40:42,718 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,719 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 13:40:42,719 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,720 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("audit_logs")
+2026-06-19 13:40:42,721 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 13:40:42,722 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE cases (
+	id CHAR(32) NOT NULL, 
+	case_number VARCHAR(50) NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	crime_type VARCHAR(50), 
+	status VARCHAR(20), 
+	priority INTEGER, 
+	assigned_officer VARCHAR(100), 
+	target_profile JSON, 
+	created_at DATETIME, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id)
+)
+
+
+2026-06-19 13:40:42,722 - sqlalchemy.engine.Engine - INFO - [no key 0.00021s] ()
+2026-06-19 13:40:42,731 - sqlalchemy.engine.Engine - INFO - CREATE UNIQUE INDEX ix_cases_case_number ON cases (case_number)
+2026-06-19 13:40:42,731 - sqlalchemy.engine.Engine - INFO - [no key 0.00026s] ()
+2026-06-19 13:40:42,736 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE osint_jobs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32) NOT NULL, 
+	job_type VARCHAR(50) NOT NULL, 
+	target_value VARCHAR(255) NOT NULL, 
+	status VARCHAR(20), 
+	result_data JSON, 
+	error_message TEXT, 
+	started_at DATETIME, 
+	completed_at DATETIME, 
+	created_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 13:40:42,737 - sqlalchemy.engine.Engine - INFO - [no key 0.00025s] ()
+2026-06-19 13:40:42,742 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE evidence_files (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	file_type VARCHAR(20), 
+	original_filename VARCHAR(255), 
+	storage_path VARCHAR(500), 
+	file_hash VARCHAR(64), 
+	extracted_text TEXT, 
+	ocr_confidence JSON, 
+	entities_found JSON, 
+	uploaded_by VARCHAR(100), 
+	uploaded_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 13:40:42,742 - sqlalchemy.engine.Engine - INFO - [no key 0.00023s] ()
+2026-06-19 13:40:42,748 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE audit_logs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	action VARCHAR(100) NOT NULL, 
+	performed_by VARCHAR(100) NOT NULL, 
+	ip_address VARCHAR(45), 
+	details JSON, 
+	timestamp DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 13:40:42,751 - sqlalchemy.engine.Engine - INFO - [no key 0.00280s] ()
+2026-06-19 13:40:42,756 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 13:40:42,807 - watchfiles.main - INFO - 3 changes detected
+2026-06-19 13:42:54,197 - watchfiles.main - INFO - 1 change detected
+2026-06-19 13:43:04,037 - watchfiles.main - INFO - 5 changes detected
+2026-06-19 14:14:11,381 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:14:11,381 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:14:11,381 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,382 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("cases")
+2026-06-19 14:14:11,383 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,383 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:14:11,383 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,384 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("osint_jobs")
+2026-06-19 14:14:11,384 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,385 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:14:11,385 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,386 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("evidence_files")
+2026-06-19 14:14:11,387 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,387 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:14:11,388 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,389 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("audit_logs")
+2026-06-19 14:14:11,389 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:14:11,390 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE cases (
+	id CHAR(32) NOT NULL, 
+	case_number VARCHAR(50) NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	crime_type VARCHAR(50), 
+	status VARCHAR(20), 
+	priority INTEGER, 
+	assigned_officer VARCHAR(100), 
+	target_profile JSON, 
+	created_at DATETIME, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id)
+)
+
+
+2026-06-19 14:14:11,390 - sqlalchemy.engine.Engine - INFO - [no key 0.00029s] ()
+2026-06-19 14:14:11,398 - sqlalchemy.engine.Engine - INFO - CREATE UNIQUE INDEX ix_cases_case_number ON cases (case_number)
+2026-06-19 14:14:11,398 - sqlalchemy.engine.Engine - INFO - [no key 0.00023s] ()
+2026-06-19 14:14:11,404 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE osint_jobs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32) NOT NULL, 
+	job_type VARCHAR(50) NOT NULL, 
+	target_value VARCHAR(255) NOT NULL, 
+	status VARCHAR(20), 
+	result_data JSON, 
+	error_message TEXT, 
+	started_at DATETIME, 
+	completed_at DATETIME, 
+	created_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:14:11,404 - sqlalchemy.engine.Engine - INFO - [no key 0.00026s] ()
+2026-06-19 14:14:11,411 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE evidence_files (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	file_type VARCHAR(20), 
+	original_filename VARCHAR(255), 
+	storage_path VARCHAR(500), 
+	file_hash VARCHAR(64), 
+	extracted_text TEXT, 
+	ocr_confidence JSON, 
+	entities_found JSON, 
+	uploaded_by VARCHAR(100), 
+	uploaded_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:14:11,411 - sqlalchemy.engine.Engine - INFO - [no key 0.00023s] ()
+2026-06-19 14:14:11,417 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE audit_logs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	action VARCHAR(100) NOT NULL, 
+	performed_by VARCHAR(100) NOT NULL, 
+	ip_address VARCHAR(45), 
+	details JSON, 
+	timestamp DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:14:11,418 - sqlalchemy.engine.Engine - INFO - [no key 0.00023s] ()
+2026-06-19 14:14:11,423 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:16:16,671 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:16:16,671 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:16:16,672 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,673 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("cases")
+2026-06-19 14:16:16,673 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,674 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:16:16,674 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,675 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("osint_jobs")
+2026-06-19 14:16:16,675 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,675 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:16:16,675 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,676 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("evidence_files")
+2026-06-19 14:16:16,676 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,677 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:16:16,677 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,677 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("audit_logs")
+2026-06-19 14:16:16,677 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:16,678 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE cases (
+	id CHAR(32) NOT NULL, 
+	case_number VARCHAR(50) NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	crime_type VARCHAR(50), 
+	status VARCHAR(20), 
+	priority INTEGER, 
+	assigned_officer VARCHAR(100), 
+	target_profile JSON, 
+	created_at DATETIME, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id)
+)
+
+
+2026-06-19 14:16:16,679 - sqlalchemy.engine.Engine - INFO - [no key 0.00020s] ()
+2026-06-19 14:16:16,687 - sqlalchemy.engine.Engine - INFO - CREATE UNIQUE INDEX ix_cases_case_number ON cases (case_number)
+2026-06-19 14:16:16,688 - sqlalchemy.engine.Engine - INFO - [no key 0.00023s] ()
+2026-06-19 14:16:16,693 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE osint_jobs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32) NOT NULL, 
+	job_type VARCHAR(50) NOT NULL, 
+	target_value VARCHAR(255) NOT NULL, 
+	status VARCHAR(20), 
+	result_data JSON, 
+	error_message TEXT, 
+	started_at DATETIME, 
+	completed_at DATETIME, 
+	created_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:16:16,693 - sqlalchemy.engine.Engine - INFO - [no key 0.00032s] ()
+2026-06-19 14:16:16,699 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE evidence_files (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	file_type VARCHAR(20), 
+	original_filename VARCHAR(255), 
+	storage_path VARCHAR(500), 
+	file_hash VARCHAR(64), 
+	extracted_text TEXT, 
+	ocr_confidence JSON, 
+	entities_found JSON, 
+	uploaded_by VARCHAR(100), 
+	uploaded_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:16:16,699 - sqlalchemy.engine.Engine - INFO - [no key 0.00027s] ()
+2026-06-19 14:16:16,705 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE audit_logs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	action VARCHAR(100) NOT NULL, 
+	performed_by VARCHAR(100) NOT NULL, 
+	ip_address VARCHAR(45), 
+	details JSON, 
+	timestamp DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:16:16,705 - sqlalchemy.engine.Engine - INFO - [no key 0.00033s] ()
+2026-06-19 14:16:16,710 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:16:18,709 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:16:18,709 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:16:18,710 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:18,713 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:16:18,713 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:18,715 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:16:18,715 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:18,716 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:16:18,717 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:16:18,718 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:17:35,738 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:17:35,739 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:17:35,739 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:17:35,740 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:17:35,740 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:17:35,741 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:17:35,741 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:17:35,742 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:17:35,742 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:17:35,743 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:18:10,852 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:18:10,852 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:18:10,852 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:10,853 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:18:10,853 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:10,854 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:18:10,854 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:10,855 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:18:10,855 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:10,856 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:18:12,685 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:18:12,686 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:18:12,686 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:12,687 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:18:12,688 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:12,688 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:18:12,689 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:12,689 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:18:12,690 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:12,690 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:18:56,737 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:18:56,737 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:18:56,737 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,739 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("cases")
+2026-06-19 14:18:56,739 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,739 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:18:56,740 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,740 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("osint_jobs")
+2026-06-19 14:18:56,740 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,741 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:18:56,741 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,742 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("evidence_files")
+2026-06-19 14:18:56,742 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,743 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:18:56,743 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,743 - sqlalchemy.engine.Engine - INFO - PRAGMA temp.table_info("audit_logs")
+2026-06-19 14:18:56,743 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:18:56,744 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE cases (
+	id CHAR(32) NOT NULL, 
+	case_number VARCHAR(50) NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	crime_type VARCHAR(50), 
+	status VARCHAR(20), 
+	priority INTEGER, 
+	assigned_officer VARCHAR(100), 
+	target_profile JSON, 
+	created_at DATETIME, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id)
+)
+
+
+2026-06-19 14:18:56,744 - sqlalchemy.engine.Engine - INFO - [no key 0.00022s] ()
+2026-06-19 14:18:56,772 - sqlalchemy.engine.Engine - INFO - CREATE UNIQUE INDEX ix_cases_case_number ON cases (case_number)
+2026-06-19 14:18:56,772 - sqlalchemy.engine.Engine - INFO - [no key 0.00025s] ()
+2026-06-19 14:18:56,777 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE osint_jobs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32) NOT NULL, 
+	job_type VARCHAR(50) NOT NULL, 
+	target_value VARCHAR(255) NOT NULL, 
+	status VARCHAR(20), 
+	result_data JSON, 
+	error_message TEXT, 
+	started_at DATETIME, 
+	completed_at DATETIME, 
+	created_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:18:56,777 - sqlalchemy.engine.Engine - INFO - [no key 0.00025s] ()
+2026-06-19 14:18:56,782 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE evidence_files (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	file_type VARCHAR(20), 
+	original_filename VARCHAR(255), 
+	storage_path VARCHAR(500), 
+	file_hash VARCHAR(64), 
+	extracted_text TEXT, 
+	ocr_confidence JSON, 
+	entities_found JSON, 
+	uploaded_by VARCHAR(100), 
+	uploaded_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:18:56,782 - sqlalchemy.engine.Engine - INFO - [no key 0.00022s] ()
+2026-06-19 14:18:56,791 - sqlalchemy.engine.Engine - INFO - 
+CREATE TABLE audit_logs (
+	id CHAR(32) NOT NULL, 
+	case_id CHAR(32), 
+	action VARCHAR(100) NOT NULL, 
+	performed_by VARCHAR(100) NOT NULL, 
+	ip_address VARCHAR(45), 
+	details JSON, 
+	timestamp DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(case_id) REFERENCES cases (id)
+)
+
+
+2026-06-19 14:18:56,791 - sqlalchemy.engine.Engine - INFO - [no key 0.00043s] ()
+2026-06-19 14:18:56,799 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:20:28,935 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:20:28,936 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:20:28,936 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:28,937 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:20:28,937 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:28,938 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:20:28,938 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:28,939 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:20:28,939 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:28,940 - sqlalchemy.engine.Engine - INFO - COMMIT
+2026-06-19 14:20:30,667 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2026-06-19 14:20:30,667 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("cases")
+2026-06-19 14:20:30,667 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:30,669 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("osint_jobs")
+2026-06-19 14:20:30,669 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:30,669 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("evidence_files")
+2026-06-19 14:20:30,669 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:30,670 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("audit_logs")
+2026-06-19 14:20:30,670 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2026-06-19 14:20:30,671 - sqlalchemy.engine.Engine - INFO - COMMIT

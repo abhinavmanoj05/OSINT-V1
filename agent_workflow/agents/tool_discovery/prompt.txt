@@ -1,0 +1,24 @@
+It converts:
+
+email_intel
+
+into:
+
+{
+  "tools": [
+    "email_osint"
+  ]
+}
+
+or:
+
+domain_intel
+
+into:
+
+{
+  "tools": [
+    "dns_lookup",
+    "whois_lookup"
+  ]
+}
