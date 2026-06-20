@@ -53,11 +53,10 @@ OSINT-V1 is a state-of-the-art, multi-agent Open Source Intelligence (OSINT) fra
    patchright install chromium
    ```
 
-5. **Configure Environment Variables:**
-   Create a `.env` file in the root directory (this file is git-ignored) and add necessary API keys or DB URIs. 
-   ```env
-   TOR_PASSWORD="your_tor_control_password"
-   # Add Neo4j or SQLite URIs if using the persistent database modules
+5. **Run the Setup Wizard:**
+   To automatically configure your `.env` file, select your Ollama model, and configure your Tor executable path, run:
+   ```bash
+   python setup.py
    ```
 
 ---
@@ -69,14 +68,12 @@ OSINT-V1 is a state-of-the-art, multi-agent Open Source Intelligence (OSINT) fra
    ollama pull llama3.1
    ```
 
-2. **Start the Tor Daemon**.
-
-3. **Launch the Application**:
-   You can boot the full OSINT suite (FastAPI backend + Streamlit frontend) using standard commands, or if an orchestrator script is provided, run that.
-   Typically, to run the UI:
+2. **Launch the Application**:
+   Use the master runner script which automatically launches the FastAPI Backend, Streamlit Frontend, Celery worker, and Tor background service:
    ```bash
-   streamlit run app.py
+   python run.py
    ```
+   *The UI will be automatically available at `http://localhost:8501`*
 
 4. **Run a Quick Search**:
    - Navigate to the Streamlit UI in your browser.

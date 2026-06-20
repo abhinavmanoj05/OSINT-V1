@@ -126,7 +126,14 @@ def run_celery():
 
 def run_tor():
     """Start Tor client automatically."""
-    tor_path = Path(r"C:\Program Files\Tor\tor\tor.exe")
+    tor_exe = r"C:\Program Files\Tor\tor\tor.exe"
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        with open(env_path, "r") as f:
+            for line in f:
+                if line.startswith("TOR_EXECUTABLE_PATH="):
+                    tor_exe = line.strip().split("=")[1]
+    tor_path = Path(tor_exe)
     if tor_path.exists():
         print(f"[Tor] Starting Tor background service from {tor_path} ...")
         # Run Tor silently in the background
@@ -137,7 +144,7 @@ def run_tor():
         )
         return proc
     else:
-        print("[Tor] WARNING: Tor not found at default path. Ensure it's running manually!")
+        print(f"[Tor] WARNING: Tor not found at {tor_path}. Ensure it's running manually!")
         return None
 
 def main():

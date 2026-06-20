@@ -91,6 +91,12 @@ def main():
             model = input("Enter Ollama Model manually [qwen2.5:3b]: ").strip() or "qwen2.5:3b"
             env_vars["OLLAMA_MODEL"] = model
 
+    # 3. Tor Configuration
+    print("\n[Tor Configuration]")
+    tor_default = "C:\\Program Files\\Tor\\tor\\tor.exe" if os.name == 'nt' else "/usr/bin/tor"
+    tor_path = input(f"Enter path to Tor executable [{tor_default}]: ").strip() or tor_default
+    env_vars["TOR_EXECUTABLE_PATH"] = tor_path
+
     # Write back to .env
     with open(".env", "w") as f:
         for k, v in env_vars.items():
