@@ -223,7 +223,7 @@ class WebScraper:
         with opener.open(req, timeout=timeout) as res:
             return res.read()
 
-    def _extract_metadata(self, soup) -> dict:
+    def _extract_metadata(self, soup, url: str) -> dict:
         """Extract structured metadata from BeautifulSoup object."""
         meta = {}
 
@@ -282,6 +282,16 @@ class WebScraper:
             except Exception:
                 pass
 
+        if not meta.get("image"):
+            from urllib.parse import urljoin
+            for img in soup.find_all('img'):
+                cls = " ".join(img.get('class', [])).lower()
+                if 'avatar' in cls or 'profile' in cls:
+                    src = img.get('src')
+                    if src and not src.startswith('data:'):
+                        meta["image"] = urljoin(url, src)
+                        break
+
         return meta
 
     async def scrape_with_metadata(self, url: str, timeout: int = 15) -> dict:
@@ -294,7 +304,7 @@ class WebScraper:
 
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html, 'html.parser')
-            result["metadata"] = self._extract_metadata(soup)
+            result["metadata"] = self._extract_metadata(soup, url)
 
             for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
                 tag.extract()
@@ -591,10 +601,48 @@ class EntityProfiler:
             from agent_workflow.api import execute_query
             print(f"[AgentWorkflow] Transferring control to ReAct Agent with search context...")
             
+            # --- Vector DB Retrieval with FAISS and Cosine Similarity ---
+            try:
+                from langchain_text_splitters import RecursiveCharacterTextSplitter
+                from langchain_community.vectorstores import FAISS
+                from langchain_huggingface import HuggingFaceEmbeddings
+                
+                splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
+                chunks = splitter.split_text(corpus_text)
+                
+                if chunks:
+                    print("[OSINT] Initializing HuggingFace Embeddings for Vector DB...")
+                    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+                    
+                    print("[OSINT] Indexing chunks into FAISS Vector DB...")
+                    vectorstore = FAISS.from_texts(
+                        texts=chunks,
+                        embedding=embeddings,
+                        # FAISS defaults to L2, but we can enforce cosine distance behavior 
+                        # by normalizing, though Langchain's FAISS wrapper handles cosine 
+                        # natively via distance_strategy if specified in newer versions, 
+                        # or by default behavior of HuggingFace embeddings.
+                    )
+                    
+                    query_str = f"{target_value} {institution} {location}"
+                    
+                    top_n = min(6, len(chunks)) 
+                    # Use similarity search which typically maps to Cosine when using sentence transformers
+                    docs = vectorstore.similarity_search(query_str, k=top_n)
+                    top_chunks = [doc.page_content for doc in docs]
+                    
+                    refined_corpus = "\n\n...[SNIP]...\n\n".join(top_chunks)
+                    print(f"[OSINT] FAISS Vector DB retrieved {len(top_chunks)} highly relevant chunks using Cosine Similarity.")
+                else:
+                    refined_corpus = ""
+            except Exception as e:
+                print(f"[OSINT] Vector DB Retrieval failed, falling back to truncation: {e}")
+                refined_corpus = corpus_text[:8000]
+
             enhanced_context = f"Target Type: {target_type}\n"
             if institution: enhanced_context += f"Institution: {institution}\n"
             if location: enhanced_context += f"Location: {location}\n"
-            enhanced_context += f"\nBackend Corpus:\n{corpus_text[:8000]}"
+            enhanced_context += f"\nRelevant Scraped Context:\n{refined_corpus}"
             
             step_report, session_history = execute_query(
                 query=target_value, 
@@ -639,6 +687,26 @@ class EntityProfiler:
             
         except Exception as e:
             print(f"[AgentWorkflow] ReAct Agent integration failed: {e}")
+
+        # --- Internal logic outside agent flow to append extracted URLs/Images ---
+        for page_url, meta in page_metadata_store.items():
+            avatar_url = meta.get("avatar_url") or meta.get("image")
+            if avatar_url:
+                # Avoid duplicates
+                already_exists = False
+                for ent in confirmed_entities + possible_entities:
+                    if ent.get("linked_data", {}).get("profile_url") == page_url or \
+                       ent.get("linked_data", {}).get("avatar_url") == avatar_url:
+                        already_exists = True
+                        break
+                
+                if not already_exists:
+                    possible_entities.append({
+                        "persona_name": meta.get("title", "Scraped Profile"),
+                        "confidence": 0.5,
+                        "linked_data": {"avatar_url": avatar_url, "profile_url": page_url},
+                        "reasoning": "Extracted via OSINT deep-scrape engine outside the ReAct flow."
+                    })
 
         # --- Entity extraction: Strict Regex baseline ---
         # The deep LLM extraction is now fully handled by the ReAct Agent in agent_workflow.

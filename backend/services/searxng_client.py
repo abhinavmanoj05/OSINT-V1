@@ -7,7 +7,18 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 from backend.core.config import settings
+from functools import wraps
 
+try:
+    from aiocache import cached, Cache
+except ImportError:
+    class Cache:
+        MEMORY = 1
+
+    def cached(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 @dataclass
 class SearchResult:
@@ -152,15 +163,6 @@ class DuckDuckGoClient:
         except Exception as e:
             print(f"[LangChain-DDG] fallback failed for '{query[:60]}': {e}")
             return []
-
-    from functools import wraps
-    try:
-        from aiocache import cached, Cache
-    except ImportError:
-        def cached(*args, **kwargs):
-            def decorator(func):
-                return func
-            return decorator
 
     @cached(ttl=3600, cache=Cache.MEMORY)
     async def search(self, query: str, max_results: int = 20) -> List[SearchResult]:
