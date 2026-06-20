@@ -2,12 +2,13 @@ import os
 from langchain.tools import tool
 from langgraph.prebuilt import create_react_agent
 from langchain_ollama import ChatOllama
-from tools.sherlock_tool import username_osint
-from tools.profile_scraper import scrape_profile
-from tools.holehe_tool import email_osint
-from tools.dns_tool import dns_lookup
-from tools.whois_tool import whois_lookup
-from core.llm import get_llm
+from backend.agent_workflow.tools.profile_scraper import scrape_profile
+from backend.agent_workflow.tools.image_extraction_tool import extract_images
+from backend.agent_workflow.tools.sherlock_tool import username_osint
+from backend.agent_workflow.tools.holehe_tool import email_osint
+from backend.agent_workflow.tools.dns_tool import dns_lookup
+from backend.agent_workflow.tools.whois_tool import whois_lookup
+from backend.agent_workflow.core.llm import get_llm
 
 tools = [
     scrape_profile,

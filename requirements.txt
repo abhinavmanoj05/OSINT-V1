@@ -43,3 +43,5 @@ uvicorn>=0.30.0
 pywin32>=306
 aiosqlite
 python-multipart
+sentence-transformers
+faiss-cpu

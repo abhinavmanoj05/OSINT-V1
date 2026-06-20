@@ -9,7 +9,7 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-from graph import run_custom_graph
+from backend.agent_workflow.graph import run_custom_graph
 
 def execute_query(query: str, session_history: list = None, context: str = "", llm_model: str = None) -> tuple[dict, list]:
     print(f"[API] Initializing Custom Multi-Agent workflow for: {query}")

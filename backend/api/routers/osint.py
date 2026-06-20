@@ -110,7 +110,7 @@ async def quick_search(
                 institution=decoded_institution,
                 location=decoded_location
             ),
-            timeout=600
+            timeout=3600
         )
         result["target_type"] = target_type
         result["target_value"] = decoded_value

@@ -352,7 +352,7 @@ class OllamaProvider(LLMProvider):
                             async with session.post(
                                 f"{self.host}/api/pull",
                                 json={"name": self.model_name},
-                                timeout=aiohttp.ClientTimeout(total=600)
+                                timeout=aiohttp.ClientTimeout(total=3600)
                             ) as pull_resp:
                                 if pull_resp.status != 200:
                                     print(f"[Ollama] Warning: Pull failed with status {pull_resp.status}")

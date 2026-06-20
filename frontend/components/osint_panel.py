@@ -182,7 +182,7 @@ def _run_investigation(
             )
             result = api_client.post(
                 f"/api/v1/osint/quick-search?{params}", {},
-                timeout=600
+                timeout=3600
             )
             progress.progress(100)
             status.update(label="OSINT Investigation Complete", state="complete", expanded=False)
@@ -204,7 +204,7 @@ def _run_investigation(
             result = api_client.post("/api/v1/osint/investigate", {
                 "case_id": case_id, "target_type": api_type,
                 "target_value": target, "priority": 3, "llm_model": llm_model
-            }, timeout=600)
+            }, timeout=3600)
             
             if "error" in result:
                 status.update(label="Investigation Failed", state="error", expanded=True)

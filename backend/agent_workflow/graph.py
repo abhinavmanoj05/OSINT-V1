@@ -4,11 +4,11 @@ import json
 import re
 
 from langgraph.graph import StateGraph, END
-from agents.manager_agent import run_manager
-from agents.tool_discovery_agent import discover_tools
-from agents.scraper_agent import agent as scraper_agent
-from agents.correlation_agent import correlation_chain
-from tools.tool_map import tool_map
+from backend.agent_workflow.agents.manager_agent import run_manager
+from backend.agent_workflow.agents.tool_discovery_agent import discover_tools
+from backend.agent_workflow.agents.scraper_agent import agent as scraper_agent
+from backend.agent_workflow.agents.correlation_agent import run_correlation
+from backend.agent_workflow.tools.tool_map import tool_map
 
 class AgentState(TypedDict):
     query: str
@@ -113,7 +113,6 @@ def correlation_node(state: AgentState):
     # Combine context and raw data
     all_data = f"INITIAL CONTEXT:\n{state['context']}\n\nRAW OSINT DATA:\n" + "\n---\n".join(state.get("raw_data", []))
     
-    from agents.correlation_agent import run_correlation
     final_json = run_correlation({"output": all_data})
     return {"final_report": final_json, "history": ["Ran Correlation"]}
 

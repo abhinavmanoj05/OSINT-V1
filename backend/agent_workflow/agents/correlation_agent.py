@@ -1,33 +1,44 @@
 from langchain_core.prompts import ChatPromptTemplate
-from core.llm import get_llm
+from backend.agent_workflow.core.llm import get_llm
 import json
 import re
 
 corr_prompt = ChatPromptTemplate.from_template("""
-You are a senior Threat Intelligence Correlation Engine.
+You are a senior Threat Intelligence Entity Resolution & Correlation Engine.
 
 You receive raw search output results from multiple OSINT tools.
 
 Your job:
-- Analyze the data and extract all potential entities (usernames, real names, emails, domains, social profiles, etc.).
-- Generate a confidence score (0.0 to 1.0) for each entity based on cross-referencing.
-- Merge similar listings and remove duplicates.
+1. **Entity Resolution:** Analyze the data and identify distinct, real-world entities (people, organizations, etc.). Extract all their potential footprints (usernames, real names, emails, domains, social profiles, etc.). Merge similar listings and remove duplicates.
+2. **Entity Correlation:** Discover relationships between these resolved entities (e.g., studying at the same college, working at the same company) and generate a confidence score (0.0 to 1.0) for each entity based on cross-referencing.
 - You MUST return a JSON object with strictly three keys:
   1. "narrative_summary": A detailed Markdown report describing the primary target. MUST include a beautifully formatted Markdown table (Profile Attribute | Details | Confidence Score) and bulleted sections for footprints and insights. Use Markdown tables, not raw ASCII text.
   2. "confirmed_entities": A list of entities with a confidence score of 0.85 or higher.
   3. "possible_entities": A list of entities with a confidence score below 0.85.
 
-Format each entity in the list as:
+Format each entity in the list strictly as:
 {{
-   "persona_name": "...",
+   "persona_name": "Actual Real Name or Primary Target Identifier",
    "confidence": 0.95,
-   "reasoning": "Why this matches",
-   "linked_data": {{"platform": "github", "username": "real_username", "urls": ["http..."]}}
+   "reasoning": "Why this matches the primary target",
+   "linked_data": {{
+       "platform": "github", 
+       "username": "real_username", 
+       "profile_url": "http...",
+       "avatar_url": "http...",
+       "location": "City, Country",
+       "email": "email@example.com",
+       "bio": "Extracted bio or headline",
+       "website": "http...",
+       "company": "Company Name"
+   }}
 }}
 
-CRITICAL RULES FOR FOOTPRINTS:
-- NEVER generate placeholder usernames like @GITHUB-PROFILE or @LINKEDIN-PROFILE.
-- If you do not find a real, explicit username in the raw data, DO NOT include the "username" field.
+CRITICAL RULES FOR FOOTPRINTS & JSON DATA:
+- ONLY include fields in `linked_data` if you have actual data for them. Omit the key if you don't.
+- ALWAYS use `profile_url` (string) for the profile link, NOT `urls` (array).
+- NEVER generate placeholder usernames like @GITHUB-PROFILE or @LINKEDIN-PROFILE. If you only see a link, try to extract the username from the URL, or omit the username field.
+- Do NOT use generic website titles or random text as `persona_name`. It must be the person's real name or their primary online handle.
 - Do NOT make up data.
 
 CRITICAL JSON FORMATTING RULES:

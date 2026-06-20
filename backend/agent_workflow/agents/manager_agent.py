@@ -1,6 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from core.llm import get_llm
+from backend.agent_workflow.core.llm import get_llm
 
 manager_prompt = ChatPromptTemplate.from_template("""
 You are the central supervisor of an information collection system.

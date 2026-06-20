@@ -65,8 +65,10 @@ def scrape_profile(url: str):
             if element.getparent() is not None:
                 element.getparent().remove(element)
         
-        # Extract visible text and truncate to avoid blowing up the LLM context
-        body_text = " ".join(tree.text_content().split())[:15000]
+        # Extract visible text and safely truncate without slicing mid-word
+        body_text = " ".join(tree.text_content().split())
+        if len(body_text) > 15000:
+            body_text = body_text[:15000].rsplit(' ', 1)[0] + '...'
 
         return {
             "url": url,
@@ -84,9 +86,9 @@ def scrape_profile(url: str):
         if any(err in curl_cffi_error.lower() for err in ["cloudflare", "403", "429", "just a moment"]):
             try:
                 from backend.core.proxy_config import PROXY
+                # Tell the proxy manager to renew, but avoid rigid sleep by relying on the manager's built-in wait
+                # or proceeding immediately. If a wait is strictly required, it should be handled inside renew_tor_identity.
                 PROXY.renew_tor_identity()
-                import time
-                time.sleep(2)
             except Exception:
                 pass
 
@@ -129,17 +131,14 @@ def scrape_profile(url: str):
                         "el => el.textContent.trim()"
                     )
 
-                desc = page.evaluate("""
-                    () => {
-                        const meta =
-                            document.querySelector(
-                                "meta[name='description']"
-                            );
-                        return meta ? meta.content : null;
-                    }
-                """)
+                # Safely extract description using Playwright's native locator instead of brittle JS evaluation
+                meta_loc = page.locator("meta[name='description']")
+                desc = meta_loc.get_attribute("content") if meta_loc.count() > 0 else None
                 
-                body_text = page.evaluate("() => document.body ? document.body.innerText.substring(0, 15000) : ''")
+                # Extract visible text and safely truncate
+                body_text = page.locator("body").inner_text() if page.locator("body").count() > 0 else ""
+                if len(body_text) > 15000:
+                    body_text = body_text[:15000].rsplit(' ', 1)[0] + '...'
 
                 return {
                     "url": url,

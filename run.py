@@ -124,6 +124,22 @@ def run_celery():
     )
     return proc
 
+def run_tor():
+    """Start Tor client automatically."""
+    tor_path = Path(r"C:\Program Files\Tor\tor\tor.exe")
+    if tor_path.exists():
+        print(f"[Tor] Starting Tor background service from {tor_path} ...")
+        # Run Tor silently in the background
+        proc = subprocess.Popen(
+            [str(tor_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return proc
+    else:
+        print("[Tor] WARNING: Tor not found at default path. Ensure it's running manually!")
+        return None
+
 def main():
     parser = argparse.ArgumentParser(description="Crime Analysis Mapper Launcher")
     parser.add_argument("--backend", action="store_true", help="Start backend only")
@@ -148,6 +164,11 @@ def main():
         procs.append(backend_proc)
         celery_proc = run_celery()
         procs.append(celery_proc)
+        
+        tor_proc = run_tor()
+        if tor_proc:
+            procs.append(tor_proc)
+            
         # Wait a moment for backend to start before opening frontend
         time.sleep(3)
         procs.append(run_frontend())
@@ -156,6 +177,8 @@ def main():
         print(" Backend  API: http://localhost:8000")
         print(" Frontend UI:  http://localhost:8501")
         print(" Celery   :    Running background tasks")
+        if tor_proc:
+            print(" Tor Client:   Auto-started successfully")
         print(" API Docs:     http://localhost:8000/docs")
         print("="*60)
         print(" Press Ctrl+C to stop all services")

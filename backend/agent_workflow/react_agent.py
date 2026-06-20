@@ -1,7 +1,7 @@
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, SystemMessage
-from core.llm import get_llm
-from tools.tool_map import tool_map
+from backend.agent_workflow.core.llm import get_llm
+from backend.agent_workflow.tools.tool_map import tool_map
 
 def run_investigation_agent(query: str, context: str = "") -> dict:
     llm = get_llm()

@@ -587,18 +587,12 @@ class EntityProfiler:
         corpus_text = " ".join(text_corpus)
         
         # --- Transfer control to agent_workflow ReAct loop ---
-        import sys
-        import os
-        workflow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "agent_workflow"))
-        if workflow_path not in sys.path:
-            sys.path.insert(0, workflow_path)
-            
         agent_json_data = {}
         confirmed_entities = []
         possible_entities = []
         agent_summary_text = ""
         try:
-            from agent_workflow.api import execute_query
+            from backend.agent_workflow.api import execute_query
             print(f"[AgentWorkflow] Transferring control to ReAct Agent with search context...")
             
             # --- Vector DB Retrieval with FAISS and Cosine Similarity ---
@@ -706,17 +700,18 @@ class EntityProfiler:
                     
                     # Clean up the title to look like a real name instead of a full SEO page title
                     clean_title = schema_name or raw_title
-                    if len(clean_title) > 30 and (" - " in clean_title or " | " in clean_title or "," in clean_title):
+                    if " - " in clean_title or " | " in clean_title or "," in clean_title:
                         import re
                         # Split by common separators and take the first part
                         parts = re.split(r' \- | \| |,', clean_title)
                         clean_title = parts[0].strip()
-                        # If it says 'Contact John Doe', remove 'Contact '
-                        if clean_title.lower().startswith("contact "):
-                            clean_title = clean_title[8:].strip()
+                        
+                    # If it says 'Contact John Doe', remove 'Contact '
+                    if clean_title.lower().startswith("contact "):
+                        clean_title = clean_title[8:].strip()
                             
-                    # Fallback to target value if it's still stupidly long
-                    if len(clean_title) > 40:
+                    # Fallback to target value if it's not a schema name and looks suspiciously like an SEO title
+                    if not schema_name and (len(clean_title) > 25 or len(clean_title.split()) > 3):
                         clean_title = target_value
                         
                     possible_entities.append({
