@@ -45,3 +45,7 @@ aiosqlite
 python-multipart
 sentence-transformers
 faiss-cpu
+networkx
+streamlit-agraph
+markdown-pdf
+google-search-results

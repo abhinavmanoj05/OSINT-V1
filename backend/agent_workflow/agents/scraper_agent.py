@@ -8,6 +8,10 @@ from backend.agent_workflow.tools.sherlock_tool import username_osint
 from backend.agent_workflow.tools.holehe_tool import email_osint
 from backend.agent_workflow.tools.dns_tool import dns_lookup
 from backend.agent_workflow.tools.whois_tool import whois_lookup
+from backend.agent_workflow.tools.github_osint_tool import github_osint
+from backend.agent_workflow.tools.reverse_image_search_tool import reverse_image_search
+from backend.agent_workflow.tools.breach_data_tool import breach_data_search
+
 from backend.agent_workflow.core.llm import get_llm
 
 tools = [
@@ -15,7 +19,10 @@ tools = [
     username_osint,
     email_osint,
     dns_lookup,
-    whois_lookup
+    whois_lookup,
+    github_osint,
+    reverse_image_search,
+    breach_data_search
 ]
 
 def get_agent_executor(llm_model: str = None):

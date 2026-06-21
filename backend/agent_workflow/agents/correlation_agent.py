@@ -13,26 +13,17 @@ Your job:
 2. **Entity Correlation:** Discover relationships between these resolved entities (e.g., studying at the same college, working at the same company) and generate a confidence score (0.0 to 1.0) for each entity based on cross-referencing.
 - You MUST return a JSON object with strictly three keys:
   1. "narrative_summary": A detailed Markdown report describing the primary target. MUST include a beautifully formatted Markdown table (Profile Attribute | Details | Confidence Score) and bulleted sections for footprints and insights. Use Markdown tables, not raw ASCII text.
-  2. "confirmed_entities": A list of entities with a confidence score of 0.85 or higher.
-  3. "possible_entities": A list of entities with a confidence score below 0.85.
+  2. "nodes": A list of extracted entities. Each node must have: "id" (unique string), "type" (e.g. Person, Email, Phone, Location, Username), and "attributes" (a dictionary of findings).
+  3. "edges": A list of connections between nodes. Each edge must have: "source" (node id), "target" (node id), and "relation" (e.g. OWNS_EMAIL, LIVES_AT).
 
-Format each entity in the list strictly as:
-{{
-   "persona_name": "Actual Real Name or Primary Target Identifier",
-   "confidence": 0.95,
-   "reasoning": "Why this matches the primary target",
-   "linked_data": {{
-       "platform": "github", 
-       "username": "real_username", 
-       "profile_url": "http...",
-       "avatar_url": "http...",
-       "location": "City, Country",
-       "email": "email@example.com",
-       "bio": "Extracted bio or headline",
-       "website": "http...",
-       "company": "Company Name"
-   }}
-}}
+Format your nodes and edges like this:
+"nodes": [
+    {{ "id": "email1", "type": "Email", "attributes": {{ "email": "test@example.com" }} }},
+    {{ "id": "person1", "type": "Person", "attributes": {{ "name": "John Doe", "confidence": 0.95 }} }}
+],
+"edges": [
+    {{ "source": "person1", "target": "email1", "relation": "OWNS_EMAIL" }}
+]
 
 CRITICAL RULES FOR FOOTPRINTS & JSON DATA:
 - ONLY include fields in `linked_data` if you have actual data for them. Omit the key if you don't.
@@ -94,6 +85,6 @@ def run_correlation(state):
         print(f"[Correlation] Manual parsing failed: {e}")
         return {
             "narrative_summary": "Failed to parse AI correlation output. Data may have been malformed. Please check backend logs.",
-            "confirmed_entities": [],
-            "possible_entities": []
+            "nodes": [],
+            "edges": []
         }

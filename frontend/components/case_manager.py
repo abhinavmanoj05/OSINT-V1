@@ -307,7 +307,9 @@ def _render_case_list():
 
     if selected != "-- Select --":
         selected_case = next(c for c in cases if c["case_number"] == selected)
-        st.session_state.selected_case = selected_case
+        # Update all relevant session state variables so the selection persists across all modules
+        for key in ("current_case", "selected_case", "investigation_case", "evidence_case", "network_case"):
+            st.session_state[key] = selected_case
         st.success(f"Case **{selected}** loaded — switch to the **🔍 Case Details** tab.")
 
 

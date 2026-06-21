@@ -10,11 +10,11 @@ Map task_type to required tools.
 Rules:
 
 domain_search → dns_lookup, whois_lookup  
-email_search → email_osint  
-username_search → username_osint  
+email_search → email_osint, breach_data_search  
+username_search → username_osint, github_osint  
 url_read → scrape_profile  
 full_name_search → web_search_persona
-general_search → web_search_persona
+general_search → web_search_persona, reverse_image_search
 
 Return JSON only:
 

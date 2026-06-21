@@ -54,20 +54,32 @@ class ReportGenerator:
         seen_urls = set()
         
         for res in results:
-            for sl in res.get("findings", []):
-                url = sl.get("url")
-                if not url or url in seen_urls:
-                    continue
-                
-                # Check if it's social media based on category or platform
-                is_social = sl.get("category") == "social"
-                if not is_social:
+            findings = res.get("findings", [])
+            if not isinstance(findings, list):
+                continue
+            for sl in findings:
+                if isinstance(sl, str):
+                    url = sl
+                    is_social = False
                     from backend.services.osint_engine import PLATFORM_DOMAINS
-                    is_social = any(domain in url.lower() for domain in PLATFORM_DOMAINS.keys())
-                
-                if is_social:
-                    social_links.append(sl)
-                    seen_urls.add(url)
+                    if any(domain in url.lower() for domain in PLATFORM_DOMAINS.keys()):
+                        is_social = True
+                    if is_social and url not in seen_urls:
+                        social_links.append({"url": url, "category": "social", "platform": "Unknown"})
+                        seen_urls.add(url)
+                elif isinstance(sl, dict):
+                    url = sl.get("url")
+                    if not url or url in seen_urls:
+                        continue
+                    
+                    is_social = sl.get("category") == "social"
+                    if not is_social:
+                        from backend.services.osint_engine import PLATFORM_DOMAINS
+                        is_social = any(domain in url.lower() for domain in PLATFORM_DOMAINS.keys())
+                    
+                    if is_social:
+                        social_links.append(sl)
+                        seen_urls.add(url)
                     
         return social_links
     
@@ -78,9 +90,11 @@ class ReportGenerator:
         risk_scores = []
         
         for result in results:
-            for finding in result.get("findings", []):
-                if finding.get("platform"):
-                    platforms_found.add(finding["platform"])
+            findings = result.get("findings", [])
+            if isinstance(findings, list):
+                for finding in findings:
+                    if isinstance(finding, dict) and finding.get("platform"):
+                        platforms_found.add(finding["platform"])
             if "risk_score" in result:
                 risk_scores.append(result["risk_score"])
         
@@ -116,20 +130,26 @@ class ReportGenerator:
             )
         
         # Check for financial indicators
-        financial_findings = [
-            f for r in results for f in r.get("findings", [])
-            if f.get("platform") in ["paytm", "phonepe", "gpay", "paypal"]
-        ]
+        financial_findings = []
+        for r in results:
+            findings = r.get("findings", [])
+            if isinstance(findings, list):
+                for f in findings:
+                    if isinstance(f, dict) and f.get("platform") in ["paytm", "phonepe", "gpay", "paypal"]:
+                        financial_findings.append(f)
         if financial_findings:
             recommendations.append(
                 "Financial transaction analysis recommended - multiple payment platforms detected"
             )
         
         # Check for encrypted comms
-        encrypted = [
-            f for r in results for f in r.get("findings", [])
-            if f.get("platform") in ["telegram", "signal", "wickr"]
-        ]
+        encrypted = []
+        for r in results:
+            findings = r.get("findings", [])
+            if isinstance(findings, list):
+                for f in findings:
+                    if isinstance(f, dict) and f.get("platform") in ["telegram", "signal", "wickr"]:
+                        encrypted.append(f)
         if encrypted:
             recommendations.append(
                 "Encrypted communication platforms detected - consider device forensics"

@@ -19,7 +19,8 @@ report_gen = ReportGenerator()
 @router.get("/{case_id}")
 async def generate_report(
     case_id: UUID,
-    format: str = Query("html", pattern="^(html|json)$"),
+    format: str = Query("html", pattern="^(html|json|pdf)$"),
+    report_type: str = Query("full", pattern="^(full|osint|network)$"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -62,13 +63,16 @@ async def generate_report(
 
     entity_idx = 1
     for res in osint_results:
-        for finding in res.get("findings", []):
-            platform = finding.get("platform", "Unknown")
-            if platform:
-                node_id = f"plat_{entity_idx}"
-                nodes.append({"id": node_id, "label": f"{platform}", "group": "Platform"})
-                edges.append({"from": "target", "to": node_id, "label": "found_on"})
-                entity_idx += 1
+        findings = res.get("findings", [])
+        if isinstance(findings, list):
+            for finding in findings:
+                if isinstance(finding, dict):
+                    platform = finding.get("platform", "Unknown")
+                    if platform:
+                        node_id = f"plat_{entity_idx}"
+                        nodes.append({"id": node_id, "label": f"{platform}", "group": "Platform"})
+                        edges.append({"from": "target", "to": node_id, "label": "found_on"})
+                        entity_idx += 1
 
     network_data = {"nodes": nodes, "edges": edges}
 
@@ -82,21 +86,56 @@ async def generate_report(
             "status": case.status,
             "priority": case.priority,
             "assigned_officer": case.assigned_officer,
-            "created_at": case.created_at.isoformat() if case.created_at else None
+            "created_at": case.created_at.isoformat() if hasattr(case.created_at, 'isoformat') else str(case.created_at) if case.created_at else None
         }
+        
+        # Filter data based on report type to generate unique reports
+        filtered_osint = osint_results if report_type in ["full", "osint"] else []
+        filtered_network = network_data if report_type in ["full", "network"] else {"nodes": [], "edges": []}
         
         report_content = report_gen.generate_investigation_report(
             case_data=case_dict,
-            osint_results=osint_results,
-            network_data=network_data,
-            output_format=format
+            osint_results=filtered_osint,
+            network_data=filtered_network,
+            output_format="html" if format == "pdf" else format
         )
         
         if format == "html":
             return HTMLResponse(content=report_content)
+        elif format == "pdf":
+            import os
+            import tempfile
+            from markdown_pdf import MarkdownPdf, Section
+            from fastapi.responses import FileResponse
+            
+            # Since report_generator generates HTML, we could use pdfkit. 
+            # But we can also generate a quick markdown version to pass to MarkdownPdf
+            # Let's use the reporting_agent to generate a dossier for this case instead!
+            from backend.agent_workflow.agents.reporting_agent import reporting_agent
+            
+            # Recreate the correlation JSON structure expected by reporting_agent
+            correlation_json = {
+                "narrative_summary": filtered_osint[0].get("summary", "Investigation Report") if filtered_osint else "Investigation Report",
+                "nodes": filtered_network.get("nodes", []),
+                "edges": filtered_network.get("edges", [])
+            }
+            target_name = filtered_osint[0].get("target_value", case.case_number) if filtered_osint else case.case_number
+            
+            pdf_path = reporting_agent.generate_dossier(correlation_json, target_name).replace(".md", ".pdf")
+            
+            if not os.path.exists(pdf_path):
+                raise HTTPException(status_code=500, detail="Failed to generate PDF. Check backend logs for details.")
+                
+            return FileResponse(
+                path=pdf_path, 
+                media_type="application/pdf", 
+                filename=f"Report_{case.case_number}.pdf"
+            )
         else:
             import json
             return JSONResponse(content=json.loads(report_content))
             
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")

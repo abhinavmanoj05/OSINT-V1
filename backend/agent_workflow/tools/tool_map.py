@@ -5,6 +5,10 @@ from .dns_tool import dns_lookup
 from .whois_tool import whois_lookup
 from .web_search_tool import web_search_persona
 from .image_extraction_tool import extract_images
+from .github_osint_tool import github_osint
+from .reverse_image_search_tool import reverse_image_search
+from .breach_data_tool import breach_data_search
+
 
 tool_map = {
     "username_osint": username_osint,
@@ -13,5 +17,8 @@ tool_map = {
     "dns_lookup": dns_lookup,
     "whois_lookup": whois_lookup,
     "web_search_persona": web_search_persona,
-    "extract_images": extract_images
+    "extract_images": extract_images,
+    "github_osint": github_osint,
+    "reverse_image_search": reverse_image_search,
+    "breach_data_search": breach_data_search
 }

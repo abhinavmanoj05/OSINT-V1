@@ -197,10 +197,32 @@ def main():
     else:
         st.header("📊 Reports")
         
-        case = st.session_state.get("investigation_case") or st.session_state.get("current_case")
+        # Fetch cases for dropdown
+        result = api_client.get("/api/v1/cases/")
+        cases = result.get("cases", []) if isinstance(result, dict) and "error" not in result else []
         
-        if not case:
-            st.warning("Please select a case in **Case Management** to generate a report.")
+        case = st.session_state.get("selected_case") or st.session_state.get("current_case") or st.session_state.get("investigation_case")
+        
+        if cases:
+            case_options = [c["case_number"] for c in cases]
+            current_index = 0
+            if case and case["case_number"] in case_options:
+                current_index = case_options.index(case["case_number"]) + 1
+                
+            selected_case_num = st.selectbox("Select Case", ["-- Select --"] + case_options, index=current_index)
+            
+            if selected_case_num != "-- Select --":
+                if not case or case["case_number"] != selected_case_num:
+                    new_case = next(c for c in cases if c["case_number"] == selected_case_num)
+                    for key in ("current_case", "selected_case", "investigation_case", "evidence_case", "network_case"):
+                        st.session_state[key] = new_case
+                    case = new_case
+                    st.rerun() # Force rerun to ensure state is cleanly propagated
+        else:
+            st.warning("No cases found in the system. Create one in Case Management.")
+            
+        if not case or (cases and selected_case_num == "-- Select --"):
+            st.info("Please select a case from the dropdown above to generate a report.")
         else:
             st.info(f"Generating report for Case: **{case['case_number']}**")
             
@@ -212,16 +234,20 @@ def main():
                     "Network Analysis Report"
                 ])
             with col2:
-                report_format = st.selectbox("Format", ["HTML", "JSON"])
+                report_format = st.selectbox("Format", ["HTML", "PDF", "JSON"])
             
             if st.button("Generate & View Report", use_container_width=True, type="primary"):
                 with st.spinner("Generating report..."):
                     fmt = report_format.lower()
-                    url = f"/api/v1/reports/{case['id']}?format={fmt}"
+                    type_mapping = {
+                        "Full Investigation Report": "full",
+                        "OSINT Summary Report": "osint",
+                        "Network Analysis Report": "network"
+                    }
+                    r_type = type_mapping.get(report_type, "full")
+                    url = f"/api/v1/reports/{case['id']}?format={fmt}&report_type={r_type}"
                     
                     if fmt == "html":
-                        # For HTML, we can try to display it in an iframe or just provide a download link
-                        # Actually, api_client.get will return the HTML string if we handle it
                         response = api_client.get(url)
                         if "error" not in response:
                             st.success("Report generated successfully!")
@@ -231,9 +257,25 @@ def main():
                                 file_name=f"Report_{case['case_number']}.html",
                                 mime="text/html"
                             )
-                            # Also show a preview
                             with st.expander("Report Preview"):
                                 st.components.v1.html(response if isinstance(response, str) else str(response), height=600, scrolling=True)
+                    elif fmt == "pdf":
+                        # The API returns the raw PDF binary content
+                        import requests
+                        base_url = "http://localhost:8000"
+                        headers = {"Authorization": f"Bearer {st.session_state.api_token}"} if st.session_state.api_token else {}
+                        resp = requests.get(f"{base_url}{url}", headers=headers)
+                        
+                        if resp.status_code == 200:
+                            st.success("PDF Report generated successfully!")
+                            st.download_button(
+                                "Download PDF Report",
+                                data=resp.content,
+                                file_name=f"Report_{case['case_number']}.pdf",
+                                mime="application/pdf"
+                            )
+                        else:
+                            st.error("Failed to generate PDF report.")
                     else:
                         result = api_client.get(url)
                         if "error" not in result:

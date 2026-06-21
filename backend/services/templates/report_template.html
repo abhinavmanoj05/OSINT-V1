@@ -162,9 +162,15 @@
                 </tr>
                 {% for fp in finding.digital_footprint %}
                 <tr>
-                    <td>{{ fp.platform }}</td>
-                    <td>{{ fp.url }}</td>
-                    <td>{{ "%.0f"|format(fp.confidence * 100) }}%</td>
+                    {% if fp is string %}
+                    <td>Unknown</td>
+                    <td>{{ fp }}</td>
+                    <td>N/A</td>
+                    {% else %}
+                    <td>{{ fp.platform | default('Unknown') }}</td>
+                    <td>{{ fp.url | default('') }}</td>
+                    <td>{{ "%.0f"|format(fp.confidence * 100) ~ '%' if fp.confidence is defined else 'N/A' }}</td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </table>

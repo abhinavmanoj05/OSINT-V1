@@ -8,6 +8,8 @@ from backend.agent_workflow.agents.manager_agent import run_manager
 from backend.agent_workflow.agents.tool_discovery_agent import discover_tools
 from backend.agent_workflow.agents.scraper_agent import agent as scraper_agent
 from backend.agent_workflow.agents.correlation_agent import run_correlation
+from backend.agent_workflow.agents.reporting_agent import reporting_agent
+from backend.services.graph_builder import build_deterministic_graph
 from backend.agent_workflow.tools.tool_map import tool_map
 
 class AgentState(TypedDict):
@@ -116,6 +118,27 @@ def correlation_node(state: AgentState):
     final_json = run_correlation({"output": all_data})
     return {"final_report": final_json, "history": ["Ran Correlation"]}
 
+def reporting_node(state: AgentState):
+    print("[Reporting Agent] Generating deterministic graph and dossier...")
+    final_json = state.get("final_report", {})
+    
+    # Generate deterministic merged graph JSON
+    try:
+        build_deterministic_graph(final_json)
+    except Exception as e:
+        print(f"[Reporting Agent] Error building deterministic graph: {e}")
+        
+    # Generate Dossier
+    try:
+        target_name = final_json.get("nodes", [{"attributes": {"name": "Unknown"}}])[0].get("attributes", {}).get("name", "Target")
+        dossier_path = reporting_agent.generate_dossier(final_json, target_name)
+        final_json["dossier_path"] = dossier_path
+        print(f"[Reporting Agent] Dossier generated at: {dossier_path}")
+    except Exception as e:
+        print(f"[Reporting Agent] Error generating dossier: {e}")
+        
+    return {"final_report": final_json, "history": ["Ran Reporting"]}
+
 
 def route_manager(state: AgentState):
     step = state.get("next_step")
@@ -135,6 +158,7 @@ workflow.add_node("manager", manager_node)
 workflow.add_node("tool_discovery", tool_discovery_node)
 workflow.add_node("scraper", scraper_node)
 workflow.add_node("correlation", correlation_node)
+workflow.add_node("reporting", reporting_node)
 
 workflow.set_entry_point("manager")
 
@@ -149,10 +173,11 @@ workflow.add_conditional_edges(
     }
 )
 
-# True ReAct loop: all tools return control back to the manager, except correlation which ends it
+# True ReAct loop: all tools return control back to the manager, except correlation which hands off to reporting
 workflow.add_edge("tool_discovery", "manager")
 workflow.add_edge("scraper", "manager")
-workflow.add_edge("correlation", END)
+workflow.add_edge("correlation", "reporting")
+workflow.add_edge("reporting", END)
 
 custom_graph = workflow.compile()
 

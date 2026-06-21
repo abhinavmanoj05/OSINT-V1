@@ -215,8 +215,8 @@ async def _build_persona_queries(search_fn, **kwargs) -> Dict[str, List[SearchRe
         return {}
 
     # Optional context that narrows results to a specific individual
-    institution = kwargs.get('institution', '').strip()
-    location = kwargs.get('location', '').strip()
+    institution = (kwargs.get('institution') or '').strip()
+    location = (kwargs.get('location') or '').strip()
 
     # Build context suffix for queries that benefit from narrowing
     ctx = ''

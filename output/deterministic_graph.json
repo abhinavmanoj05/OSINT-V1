@@ -1,0 +1,33 @@
+{
+  "nodes": [
+    {
+      "id": "developeraromal",
+      "type": "Person",
+      "attributes": {
+        "name": "DeveloperAromal",
+        "email": "dev@example.com",
+        "phone": "+1234567890",
+        "location": "New York, NY",
+        "social_media": [
+          {
+            "type": "LinkedIn",
+            "url": "https://www.linkedin.com/in/devaromal/",
+            "confidence": 0.9
+          },
+          {
+            "type": "GitHub",
+            "url": "https://github.com/DeveloperAromal",
+            "confidence": 0.85
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "developeraromal",
+      "target": "developeraromal",
+      "relation": "OWNS_EMAIL"
+    }
+  ]
+}

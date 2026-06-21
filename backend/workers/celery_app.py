@@ -14,6 +14,10 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 celery_out = os.path.join(base_dir, ".celery", "out")
 celery_proc = os.path.join(base_dir, ".celery", "processed")
 
+# Create directories to prevent FileNotFoundError during worker startup
+os.makedirs(celery_out, exist_ok=True)
+os.makedirs(celery_proc, exist_ok=True)
+
 celery_app = Celery(
     "crime_mapper",
     broker="filesystem://",
@@ -111,8 +115,11 @@ def run_osint_investigation(self, job_id: str, target_type: str, target_value: s
                 logger.info(f"Job {job_id} completed successfully. Result data stored.")
                 
                 logger.info(f"Storing entities from job {job_id} into graph database.")
-                await _store_entities(target_type, target_value, result_data)
-                logger.info(f"Entities from job {job_id} stored successfully.")
+                try:
+                    await _store_entities(target_type, target_value, result_data)
+                    logger.info(f"Entities from job {job_id} stored successfully.")
+                except Exception as neo_err:
+                    logger.warning(f"Could not connect to Neo4j. Graph storage skipped: {neo_err}")
                 
                 return result_data
                 

@@ -3,6 +3,9 @@ Neo4j graph operations
 """
 from typing import List, Dict, Optional, Any
 from neo4j import AsyncGraphDatabase
+import networkx as nx
+import json
+import os
 
 from backend.models.graph import EntityNode, Relationship
 
@@ -227,3 +230,78 @@ class CrimeGraphBuilder:
                     "confidence": 1.0
                 }
             return None
+
+def build_deterministic_graph(correlation_json: Dict, output_path: str = "output/deterministic_graph.json") -> Dict:
+    """
+    Takes nodes and edges from the LLM, loads them into NetworkX, 
+    automatically merges nodes sharing the exact same identifier, 
+    and exports a final merged JSON structure.
+    """
+    G = nx.Graph()
+    
+    nodes = correlation_json.get("nodes", [])
+    edges = correlation_json.get("edges", [])
+    
+    # 1. Add all nodes
+    for node in nodes:
+        node_id = node.get("id")
+        if node_id:
+            G.add_node(node_id, type=node.get("type"), attributes=node.get("attributes", {}))
+            
+    # 2. Add edges
+    for edge in edges:
+        source = edge.get("source")
+        target = edge.get("target")
+        if source and target and G.has_node(source) and G.has_node(target):
+            G.add_edge(source, target, relation=edge.get("relation", "LINKED"))
+            
+    # 3. Deterministic Merge: merge nodes that have the same exact email/phone attributes
+    # We will build a mapping of unique_value -> node_id
+    identifier_map = {}
+    nodes_to_merge = [] # List of tuples (node_id1, node_id2)
+    
+    for n in G.nodes(data=True):
+        node_id = n[0]
+        attrs = n[1].get("attributes", {})
+        
+        # Check attributes that act as hard identifiers
+        for key in ["email", "phone", "username"]:
+            val = attrs.get(key)
+            if val:
+                val = str(val).lower().strip()
+                dict_key = f"{key}:{val}"
+                if dict_key in identifier_map:
+                    nodes_to_merge.append((identifier_map[dict_key], node_id))
+                else:
+                    identifier_map[dict_key] = node_id
+
+    # Execute merges
+    for u, v in nodes_to_merge:
+        if G.has_node(u) and G.has_node(v) and u != v:
+            # Merge attributes first
+            attrs_u = G.nodes[u].get("attributes", {})
+            attrs_v = G.nodes[v].get("attributes", {})
+            for k, val in attrs_v.items():
+                if k not in attrs_u or not attrs_u[k]:
+                    attrs_u[k] = val
+            nx.set_node_attributes(G, {u: {"attributes": attrs_u}})
+            
+            # Contract nodes
+            G = nx.contracted_nodes(G, u, v, self_loops=False)
+
+    # 4. Export JSON
+    final_nodes = []
+    for n in G.nodes(data=True):
+        final_nodes.append({"id": n[0], "type": n[1].get("type"), "attributes": n[1].get("attributes", {})})
+        
+    final_edges = []
+    for u, v, data in G.edges(data=True):
+        final_edges.append({"source": u, "target": v, "relation": data.get("relation", "LINKED")})
+        
+    final_data = {"nodes": final_nodes, "edges": final_edges}
+    
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(final_data, f, indent=2)
+        
+    return final_data
