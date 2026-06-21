@@ -2,6 +2,8 @@
 
 OSINT-V1 is a state-of-the-art, multi-agent Open Source Intelligence (OSINT) framework designed for deep persona investigations, entity correlation, and threat intelligence. Powered by a local LLM integration (e.g., Llama 3.1 / Qwen 2.5 via Ollama) and a robust ReAct (Reasoning and Acting) autonomous agent loop, it cross-references usernames, emails, IP addresses, and other identifiers across the clear web, social media, breach databases, and public records.
 
+> **Note**: For an in-depth dive into the architecture, agent workflows, and API specifications, please refer to our [Detailed Documentation](DOCUMENTATION.md).
+
 ## Key Features
 
 - **Multi-Agent ReAct Workflow**: Operates using autonomous agents (Manager, Scraper, Correlation, Tool Discovery) that iteratively plan, execute tools, scrape footprints, and synthesize findings without human intervention.
@@ -9,6 +11,8 @@ OSINT-V1 is a state-of-the-art, multi-agent Open Source Intelligence (OSINT) fra
 - **Deep Web Scraping**: Utilizes `curl_cffi` for lightweight TLS-impersonation to bypass Cloudflare, with an automatic fallback to headless Chromium (`patchright`) for complex, JavaScript-rendered websites.
 - **Resilient AI Parsing**: Employs `json-repair` to dynamically reconstruct and fix structurally damaged JSON payloads output by smaller local LLMs, ensuring uninterrupted pipeline execution.
 - **Interactive UI**: A beautiful, glassmorphic Streamlit dashboard for real-time visualization of agent thoughts, terminal logs, confidence scoring, and Markdown-rendered target summaries.
+- **Case Management & Dossier Generation**: Organize investigations into distinct cases and automatically generate comprehensive Markdown dossiers summarizing agent findings and gathered intelligence.
+- **Advanced Network Visualization**: Interactive master graph expansion, automated criminal syndicate detection, and shortest-path finding between targets and entities.
 
 ---
 
