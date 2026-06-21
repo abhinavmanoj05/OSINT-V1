@@ -1,38 +1,18 @@
 [
     {
-        "persona_name": "DeveloperAromal",
+        "persona_name": "DeveloperAromal/Aromal S",
         "confidence": 0.95,
-        "reasoning": "Multiple sources confirm this is the primary target.",
+        "reasoning": "Shared profile URL and social media handles",
         "linked_data": {
             "platform": "github",
             "username": "DeveloperAromal",
-            "profile_url": "https://github.com/DeveloperAromal",
+            "profile_url": "https://aromals.vercel.app",
             "avatar_url": null,
             "location": "Kerala, India",
-            "bio": "Full-Stack Developer | AI/ML & Cybersecurity Innovator | Rapid Delivery Specialist | Mentored 100+ Students"
-        }
-    },
-    {
-        "persona_name": "Aromal S",
-        "confidence": 0.9,
-        "reasoning": "Multiple sources confirm this is the primary target.",
-        "linked_data": {
-            "platform": "gitlab",
-            "username": "DeveloperAromal",
-            "profile_url": "https://gitlab.com/DeveloperAromal",
-            "avatar_url": null,
-            "location": "Kerala, India"
-        }
-    },
-    {
-        "persona_name": "developeraromal",
-        "confidence": 0.85,
-        "reasoning": "Multiple sources confirm this is the primary target.",
-        "linked_data": {
-            "platform": "linktree",
-            "username": "DeveloperAromal",
-            "profile_url": "https://linktr.ee/DeveloperAromal",
-            "avatar_url": null
+            "email": null,
+            "bio": "Full-Stack Developer | AI/ML & Cybersecurity Innovator | Rapid Delivery Specialist | Mentor to 100+ Students",
+            "website": "https://aromals.vercel.app",
+            "company": null
         }
     }
 ]
