@@ -39,7 +39,7 @@ def render_network_viz():
     with col1:
         analysis_type = st.selectbox(
             "Analysis Type",
-            ["Full Network", "Entity Profile Viewer", "Syndicate Detection", "Path Finder"]
+            ["Full Network", "Syndicate Detection", "Path Finder"]
         )
         
         if analysis_type == "Full Network":
@@ -56,21 +56,6 @@ def render_network_viz():
                     except Exception as e:
                         st.error(f"Error loading case network: {e}")
                 
-        elif analysis_type == "Entity Profile Viewer":
-            if not entity_options:
-                st.info("No entities found. Add data from the OSINT panel first.")
-                entity_id = None
-            else:
-                entity_id = st.selectbox(
-                    "Select Entity",
-                    options=list(entity_options.keys()),
-                    format_func=lambda x: entity_options.get(x)
-                )
-            
-            if st.button("View Profile", use_container_width=True, disabled=not entity_options):
-                _load_network(entity_id, 1, selected_case_id)
-                
-
         elif analysis_type == "Syndicate Detection":
             min_connections = st.slider("Min Connections", 2, 10, 3)
             
@@ -116,10 +101,7 @@ def render_network_viz():
         st.subheader("Results")
         
         if "network_data" in st.session_state and st.session_state.network_data:
-            if analysis_type == "Entity Profile Viewer":
-                _render_profile(st.session_state.network_data)
-            else:
-                _render_graph(st.session_state.network_data)
+            _render_graph(st.session_state.network_data)
         else:
             st.info("Generate an analysis to see results")
         
@@ -348,12 +330,24 @@ def _render_graph(network_data: dict):
         node_size = node.get("value", 20)
         color = color_map.get(node.get("group"), "#6b7280")
         
+        # Try to extract URL from properties
+        url = ""
+        try:
+            import ast
+            props_str = node.get("title", "{}")
+            props = ast.literal_eval(props_str)
+            if isinstance(props, dict):
+                url = props.get("url", props.get("profile_url", props.get("link", props.get("source", ""))))
+        except:
+            pass
+            
         net.add_node(
             node["id"],
             label=node.get("label", node["id"]),
             title=node.get("title", ""),
             color=color,
             size=node_size,
+            url=url,
             font={"color": "#ffffff", "size": 14}
         )
     
@@ -372,7 +366,135 @@ def _render_graph(network_data: dict):
     
     with open("network.html", "r", encoding="utf-8") as f:
         html = f.read()
-        components.html(html, height=600)
+        
+    # Inject JavaScript for enterprise OSINT graph interactions
+    click_js = r"""
+    var highlightActive = false;
+    
+    function updateInfoBox(node) {
+        var box = document.getElementById("osint-info-box");
+        if (!box) {
+            box = document.createElement("div");
+            box.id = "osint-info-box";
+            box.style.position = "absolute";
+            box.style.top = "20px";
+            box.style.right = "20px";
+            box.style.width = "320px";
+            box.style.backgroundColor = "rgba(15, 23, 42, 0.95)";
+            box.style.color = "#f8fafc";
+            box.style.padding = "20px";
+            box.style.borderRadius = "12px";
+            box.style.boxShadow = "0 15px 25px -5px rgba(0,0,0,0.6)";
+            box.style.fontFamily = "system-ui, -apple-system, sans-serif";
+            box.style.fontSize = "14px";
+            box.style.zIndex = "1000";
+            box.style.border = "1px solid #334155";
+            box.style.maxHeight = "80%";
+            box.style.overflowY = "auto";
+            document.getElementById("mynetwork").appendChild(box);
+        }
+        
+        var html = "<h3 style='margin-top:0; margin-bottom:15px; color:#38bdf8; border-bottom:1px solid #334155; padding-bottom:10px;'>" + (node.label || "Entity") + "</h3>";
+        
+        var linkUrl = "";
+        if (node.url) {
+            linkUrl = node.url;
+        } else if (node.title && typeof node.title === 'string') {
+            var match = node.title.match(/https?:\/\/[^\s'"]+/);
+            if (match) linkUrl = match[0];
+        }
+        
+        if (linkUrl) {
+            html += "<a href='" + linkUrl + "' target='_blank' style='display:inline-block; margin-bottom:15px; padding:8px 12px; background-color:#0ea5e9; color:white; text-decoration:none; border-radius:6px; font-weight:bold; box-shadow:0 4px 6px -1px rgba(0,0,0,0.3);'>🔗 Open Source Link</a>";
+        }
+        
+        if (node.title && typeof node.title === 'string') {
+            var cleanTitle = node.title.replace(/[{}]/g, '').replace(/'/g, '');
+            var pairs = cleanTitle.split(', ');
+            var propsHtml = "<div style='display:flex; flex-direction:column; gap:10px;'>";
+            for (var i=0; i<pairs.length; i++) {
+                var p = pairs[i].split(': ');
+                if (p.length === 2) {
+                    var k = p[0].trim();
+                    var v = p[1].trim();
+                    if (v.startsWith('http')) {
+                        v = "<a href='" + v + "' target='_blank' style='color:#38bdf8; word-break:break-all;'>" + v + "</a>";
+                    } else {
+                        v = "<span style='word-break:break-all;'>" + v + "</span>";
+                    }
+                    propsHtml += "<div><strong style='color:#94a3b8; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;'>" + k + "</strong><br/>" + v + "</div>";
+                } else {
+                    propsHtml += "<div style='color:#cbd5e1;'>" + pairs[i] + "</div>";
+                }
+            }
+            propsHtml += "</div>";
+            html += propsHtml;
+        }
+        
+        box.innerHTML = html;
+        box.style.display = "block";
+    }
+
+    network.on("click", function (params) {
+        if (params.nodes.length > 0) {
+            highlightActive = true;
+            var selectedNode = params.nodes[0];
+            var connectedNodes = network.getConnectedNodes(selectedNode);
+            var allNodesArray = nodes.get();
+            var nodeUpdates = [];
+            
+            for (var i = 0; i < allNodesArray.length; i++) {
+                var n = allNodesArray[i];
+                if (n.id === selectedNode || connectedNodes.includes(n.id)) {
+                    nodeUpdates.push({id: n.id, color: nodeColors[n.id] || n.color});
+                } else {
+                    nodeUpdates.push({id: n.id, color: 'rgba(200,200,200,0.1)'});
+                }
+            }
+            nodes.update(nodeUpdates);
+            
+            var connectedEdges = network.getConnectedEdges(selectedNode);
+            var allEdgesArray = edges.get();
+            var edgeUpdates = [];
+            for (var i = 0; i < allEdgesArray.length; i++) {
+                var e = allEdgesArray[i];
+                if (connectedEdges.includes(e.id)) {
+                    edgeUpdates.push({id: e.id, color: {color: '#9ca3af', opacity: 1.0}});
+                } else {
+                    edgeUpdates.push({id: e.id, color: {color: '#4b5563', opacity: 0.1}});
+                }
+            }
+            edges.update(edgeUpdates);
+
+            updateInfoBox(nodes.get(selectedNode));
+            
+        } else {
+            if (highlightActive) {
+                var allNodesArray = nodes.get();
+                var nodeUpdates = [];
+                for (var i = 0; i < allNodesArray.length; i++) {
+                    nodeUpdates.push({id: allNodesArray[i].id, color: nodeColors[allNodesArray[i].id] || allNodesArray[i].color});
+                }
+                nodes.update(nodeUpdates);
+                
+                var allEdgesArray = edges.get();
+                var edgeUpdates = [];
+                for (var i = 0; i < allEdgesArray.length; i++) {
+                    edgeUpdates.push({id: allEdgesArray[i].id, color: {color: '#4b5563', opacity: 1.0}});
+                }
+                edges.update(edgeUpdates);
+                
+                highlightActive = false;
+            }
+            var box = document.getElementById("osint-info-box");
+            if (box) box.style.display = "none";
+        }
+    });
+    """
+    html = html.replace('network = new vis.Network(container, data, options);', 
+                        'network = new vis.Network(container, data, options);\n' + click_js)
+                        
+    components.html(html, height=600)
 
 
 def _render_syndicates(syndicates: list):

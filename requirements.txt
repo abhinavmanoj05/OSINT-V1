@@ -49,3 +49,5 @@ networkx
 streamlit-agraph
 markdown-pdf
 google-search-results
+holehe
+sherlock-project

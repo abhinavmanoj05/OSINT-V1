@@ -24,3 +24,7 @@ pytesseract==0.3.13
 redis==5.2.1
 SQLAlchemy==2.0.36
 stem==1.8.2
+python_whois==0.9.6
+markdown-pdf
+holehe
+sherlock-project

@@ -24,34 +24,83 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Premium Enterprise Custom CSS
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
     .main-header {
-        font-size: 2rem;
-        font-weight: bold;
+        font-size: 2.2rem;
+        font-weight: 700;
         text-align: center;
-        padding: 1rem;
-        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
-        color: white;
-        border-radius: 10px;
-        margin-bottom: 1rem;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #f8fafc;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        letter-spacing: -0.5px;
+        position: relative;
+        overflow: hidden;
     }
+    
+    .main-header::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.2), transparent);
+        transform: translateX(-100%);
+        animation: shimmer 3s infinite;
+    }
+    
+    @keyframes shimmer {
+        100% { transform: translateX(100%); }
+    }
+
     .stButton>button {
-        background-color: #1e3a8a;
+        background: linear-gradient(to right, #3b82f6, #2563eb);
         color: white;
-        font-weight: bold;
-        border-radius: 5px;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        padding: 0.6rem 1.2rem;
+        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+        transition: all 0.2s ease-in-out;
     }
+    
     .stButton>button:hover {
-        background-color: #2563eb;
+        background: linear-gradient(to right, #60a5fa, #3b82f6);
+        box-shadow: 0 6px 12px -2px rgba(59, 130, 246, 0.5);
+        transform: translateY(-2px);
     }
-    .css-1d391kg {
-        padding-top: 1rem;
+
+    .stTextInput>div>div>input {
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background-color: #1e293b;
+        color: white;
+        transition: all 0.2s ease;
     }
-    .risk-high { color: #dc2626; font-weight: bold; }
-    .risk-medium { color: #d97706; font-weight: bold; }
-    .risk-low { color: #16a34a; font-weight: bold; }
+    
+    .stTextInput>div>div>input:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    /* Status indicators */
+    .risk-high { color: #ef4444; font-weight: 700; text-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+    .risk-medium { color: #f59e0b; font-weight: 600; }
+    .risk-low { color: #10b981; font-weight: 600; }
+    
+    /* Panel styling */
+    .stSelectbox>div>div>div {
+        border-radius: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 

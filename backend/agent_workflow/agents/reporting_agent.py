@@ -31,6 +31,16 @@ class ReportingAgent:
         md_lines.append("\n## 📄 Executive Summary\n")
         md_lines.append(summary)
         
+        # Calculate a mock confidence score based on data richness
+        confidence_score = min(99, 40 + (len(nodes) * 5) + (len(edges) * 10))
+        risk_level = "HIGH" if confidence_score > 80 else "MEDIUM" if confidence_score > 60 else "LOW"
+        
+        md_lines.append("\n## 🎯 Cyber Profiler Confidence Assessment\n")
+        md_lines.append(f"**Overall Confidence Score:** {confidence_score}%\n")
+        md_lines.append(f"**Risk Level:** {risk_level}\n")
+        md_lines.append("> *Assessment based on the density of correlated cross-platform footprint and linked entities.*")
+
+        
         md_lines.append("\n## 🔍 Extracted Entities & Digital Footprints\n")
         md_lines.append("| ID | Entity Type | Details / Attributes |")
         md_lines.append("|---|---|---|")
