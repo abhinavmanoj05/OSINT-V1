@@ -300,10 +300,9 @@ class WebScraper:
         try:
             loop = asyncio.get_running_loop()
             raw = await loop.run_in_executor(None, self._fetch_sync, url, timeout)
-            html = raw.decode('utf-8', errors='ignore')
 
             from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(raw, 'html.parser')
             result["metadata"] = self._extract_metadata(soup, url)
 
             for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
@@ -440,6 +439,29 @@ class EntityProfiler:
         if target_type == "ip":
             opsec_warnings.append(f"Direct scanning of IP {target_value} may alert the target. Use passive sources.")
             recommended_next_steps.append("Use Shodan, Censys, or historical DNS lookups passively.")
+            
+            try:
+                import urllib.request
+                import json
+                req = urllib.request.Request(f"http://ip-api.com/json/{target_value}", headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    ip_data = json.loads(resp.read().decode('utf-8'))
+                    if ip_data.get("status") == "success":
+                        loc_str = f"IP Location: {ip_data.get('city', 'Unknown')}, {ip_data.get('regionName', '')}, {ip_data.get('country', '')}".strip(', ')
+                        isp_str = f"ISP/Provider: {ip_data.get('isp', 'Unknown')} (Org: {ip_data.get('org', 'Unknown')})"
+                        
+                        text_corpus.append(loc_str)
+                        text_corpus.append(isp_str)
+                        
+                        source_links.append({
+                            "title": f"[IP GEOLOCATION] {target_value}",
+                            "url": f"https://ip-api.com/#{target_value}",
+                            "category": "identity",
+                            "platform": "IP-API",
+                            "snippet": f"{loc_str} | {isp_str}"
+                        })
+            except Exception as e:
+                print(f"IP Geolocation failed for {target_value}: {e}")
         elif target_type in ("phone", "email"):
             opsec_warnings.append("Ensure no local investigator metadata leaks during external lookup.")
             recommended_next_steps.append("Check breach databases via localized mirrors.")

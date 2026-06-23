@@ -10,6 +10,47 @@ from typing import Dict, Optional
 from frontend.utils.api_client import api_client
 from backend.core.config import settings
 
+@st.cache_data(ttl=3600)
+def has_human_face(img_url: str) -> bool:
+    if not img_url or not img_url.startswith("http"):
+        return False
+    try:
+        import cv2
+        import numpy as np
+        import urllib.request
+        req = urllib.request.Request(img_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            arr = np.asarray(bytearray(resp.read()), dtype=np.uint8)
+            img = cv2.imdecode(arr, -1)
+            if img is None:
+                return False
+            if len(img.shape) == 3 and img.shape[2] == 4:
+                img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
+            return len(faces) > 0
+    except Exception:
+        return False
+
+@st.cache_data(ttl=3600)
+def get_ip_info(ip_addr: str) -> str:
+    if not ip_addr: return ""
+    try:
+        import urllib.request
+        import json
+        req = urllib.request.Request(f"http://ip-api.com/json/{ip_addr}", headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            if data.get("status") == "success":
+                city = data.get('city', 'Unknown')
+                country = data.get('country', '')
+                isp = data.get('isp', 'Unknown')
+                return f"{ip_addr} ({city}, {country} — {isp})"
+    except Exception:
+        pass
+    return ip_addr
+
 PLATFORM_ICONS = {
     'Instagram': 'IG', 'LinkedIn': 'LI', 'GitHub': 'GH', 'Twitter/X': 'TW',
     'Facebook': 'FB', 'YouTube': 'YT', 'TikTok': 'TK', 'Reddit': 'RD',
@@ -593,6 +634,8 @@ def _render_agent_findings(results: Dict):
     best_focus_conf = 0
     best_image = ""
     best_image_conf = 0
+    best_ip = ""
+    best_ip_conf = 0
     
     footprints = []
     
@@ -607,9 +650,11 @@ def _render_agent_findings(results: Dict):
             best_name_conf = conf
             
         img = linked.get("profile_pic") or linked.get("avatar_url") or linked.get("image_url") or linked.get("avatar")
-        if img and conf > best_image_conf:
-            best_image = img
-            best_image_conf = conf
+        if img:
+            face_conf = conf + (1.0 if has_human_face(img) else 0.0)
+            if face_conf > best_image_conf:
+                best_image = img
+                best_image_conf = face_conf
             
         loc = linked.get("location") or (linked.get("locations")[0] if linked.get("locations") else "")
         if loc and conf > best_location_conf:
@@ -635,6 +680,11 @@ def _render_agent_findings(results: Dict):
         if focus and conf > best_focus_conf:
             best_focus = focus
             best_focus_conf = conf
+
+        ip = linked.get("ip_address") or linked.get("ip") or (linked.get("ips")[0] if linked.get("ips") else "")
+        if ip and conf > best_ip_conf:
+            best_ip = ip
+            best_ip_conf = conf
 
         if linked.get("platform") and linked.get("username"):
             footprints.append({
@@ -667,9 +717,26 @@ def _render_agent_findings(results: Dict):
     github_profiles = results.get("github_profiles", [])
     for gp in github_profiles:
         img = gp.get("avatar_url")
-        if img and 0.95 > best_image_conf:
-            best_image = img
-            best_image_conf = 0.95
+        if img:
+            face_conf = 0.95 + (1.0 if has_human_face(img) else 0.0)
+            if face_conf > best_image_conf:
+                best_image = img
+                best_image_conf = face_conf
+            
+        n = gp.get("name") or gp.get("login")
+        if n and 0.95 > best_name_conf:
+            best_name = n
+            best_name_conf = 0.95
+            
+        loc = gp.get("location")
+        if loc and 0.95 > best_location_conf:
+            best_location = loc
+            best_location_conf = 0.95
+            
+        em = gp.get("email")
+        if em and 0.95 > best_email_conf:
+            best_email = em
+            best_email_conf = 0.95
             
     st.markdown("""
     <style>
@@ -734,7 +801,13 @@ def _render_agent_findings(results: Dict):
     st.markdown("### 📋 Identity Summary")
     table_html = "<div class='glass-card' style='padding: 0;'><table class='int-table'>"
     table_html += "<tr><th>Attribute</th><th>Value</th><th>Confidence</th></tr>"
-    
+    extracted = results.get("extracted_entities", {})
+    if not best_ip:
+        ips = extracted.get("ip_address", []) or extracted.get("ip", [])
+        if ips:
+            best_ip = ips[0]
+            best_ip_conf = 0.8
+
     fields = [
         ("Full Name", best_name, best_name_conf),
         ("Location", best_location, best_location_conf),
@@ -742,6 +815,7 @@ def _render_agent_findings(results: Dict):
         ("Bio / Headline", best_bio, best_bio_conf),
         ("Personal Website", best_website, best_website_conf),
         ("Primary Focus", best_focus, best_focus_conf),
+        ("IP Address", get_ip_info(best_ip) if best_ip else "", best_ip_conf),
     ]
     
     has_fields = False
